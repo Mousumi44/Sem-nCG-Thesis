@@ -1,0 +1,32 @@
+{
+  "id": "dm-test-8764fb95bfad8ee849274873a92fb8d6b400eee2",
+  "model_id": "M11",
+  "filepath": "cnndm/dailymail/stories/8764fb95bfad8ee849274873a92fb8d6b400eee2.story",
+  "text": "Paul Merson has restarted his row with Andros Townsend after the Tottenham midfielder was brought on with only seven minutes remaining in his team's 0-0 draw with Burnley on Sunday. 'Just been watching the game, did you miss the coach?...",
+  "decoded": "paul merson was brought on with only seven minutes remaining in his team 's 0-0 draw with burnley. andros townsend scored the tottenham midfielder in the 89th minute...",
+  "references": [
+    "Andros Townsend an 83rd minute sub in Tottenham's draw with Burnley. He was unable to find a winner as the game ended without a goal. Townsend had clashed with Paul Merson last week over England call-up.",
+    "Sports columnist Paul Merson and Andros Townsend are in the midst of a twitter feud. Merson started it when Townsend was called up and wrote something disparaging about him in his column...",
+    "Merson is angered by the statement made by Townsend in his Sky Sports column. Merson threw a dig at Townsend after scoring his last game.",
+    "Paul Merson has officially restarted his row line up with Andros Townsend. This is a result of seeing Townsend's performance in the last seven minutes of the game the previous Sunday.",
+    "An athlete was brought in to save the game during an event against a rival team. Although many disagreed with this decision as players have been known to get in trouble from time to time.",
+    "Paul Merson and Andros Townsend have been in a bout for a while now, Merson felt that Townsend did not deserve a place in the English team. Townsend scored for England with a crucial goal to which Merson apologized...",
+    "Paul Merson restarted his feud with the former Arsenal player Andros Townsend. Townsend scored a goal for England against Italy. Townsend replied to Merson’s remarks on Twitter...",
+    "Paul Merson used to play for Arsenal. Andros Townsend has been criticized by Paul Merson. The goal scored against Italy was made by Townsend.",
+    "Paul Merson, former Arsenal player and Andros Townsend have restarted their bout of banter. Merson tweeted about Townsend and his poor performance...",
+    "Andros Townsend used to play for Arsenal. Sky Sports pundit Merson criticized Andros Townsend. Townsend scored a goal against Italy to a draw.",
+    "Paul Merson, the Sky Sports pundit, criticized Andros Townsend last week after his call-up to the England squad. Merson admitted it was a mistake after Townsend scored, bringing the match against Italy to a tie..."
+  ],
+  "expert_annotations": [
+    { "coherence": 2, "consistency": 1, "fluency": 4, "relevance": 2 },
+    { "coherence": 1, "consistency": 1, "fluency": 2, "relevance": 1 },
+    { "coherence": 1, "consistency": 1, "fluency": 3, "relevance": 2 }
+  ],
+  "turker_annotations": [
+    { "coherence": 3, "consistency": 3, "fluency": 4, "relevance": 3 },
+    { "coherence": 3, "consistency": 3, "fluency": 4, "relevance": 3 },
+    { "coherence": 3, "consistency": 3, "fluency": 4, "relevance": 3 },
+    { "coherence": 3, "consistency": 3, "fluency": 4, "relevance": 3 },
+    { "coherence": 3, "consistency": 3, "fluency": 4, "relevance": 3 }
+  ]
+}

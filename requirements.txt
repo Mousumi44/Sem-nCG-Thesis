@@ -1,0 +1,7 @@
+pandas
+scikit-learn
+torch
+transformers
+nltk
+jsonlines
+sentence-transformers
