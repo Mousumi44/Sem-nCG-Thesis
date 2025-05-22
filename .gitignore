@@ -1,2 +1,18 @@
 output/
 venv/
+Algorithm_working.txt
+discussion_points.txt
+__pycache__/
+# Add these files/folders to ignore them in git
+prepared_data.json
+prepared_data_v2.json
+sample.json
+sample_1.jsonl
+data_annotations_aligned.paired.json
+score.jsonl
+*.log
+*.tmp
+*.bak
+*.swp
+*.DS_Store
+model.json
