@@ -44,8 +44,8 @@ Use a GitHub Wiki or local notes for:
 
 ## Contact
 
-Project by:
-Supervisor by:
-Email:
+- Project by:
+- Supervisor by:
+- Email:
 
 For questions or collaboration, open an issue or contact via email.
