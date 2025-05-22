@@ -26,15 +26,6 @@ This project adapts the **Sem-nCG** (Semantic Normalized Cumulative Gain) metric
 
 - **Sem-nCG@k** = Normalized Cumulative Gain for top-k model sentences
 
-## Wiki and Project Notes
-
-Use a GitHub Wiki or local notes for:
-
-- Meeting minutes
-- Dataset versions
-- Experiment logs (model configs, results)
-- Paper links and highlights
-- TODOs and research goals
 
 ## Credits
 
