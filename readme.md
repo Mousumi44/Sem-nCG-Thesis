@@ -30,7 +30,6 @@ This project adapts the **Sem-nCG** (Semantic Normalized Cumulative Gain) metric
 ## Credits
 
 - Sem-nCG: Based on Findings of ACL 2022 paper: https://aclanthology.org/2022.findings-acl.122
-- Sentence embeddings: https://www.sbert.net/
 - Data annotations: SummEval https://github.com/Yale-LILY/SummEval
 
 ## Contact
