@@ -1,6 +1,0 @@
-- Should I use all reference sentences combined or just 1 (see sample_1.json)
-- Had to change compute_senID() function in pre-run.py due to abstractive summaries in dataset
-- Skipped the samples in compute_score.py that had less than k elements or NULL
-- Dataset had 1600 samples and was taking a lot of time to compute. Used 200 samples for now. Should I get access to Uni cloud?
-- Make a gitlab repo.
-- How to handle abstractive cases?
