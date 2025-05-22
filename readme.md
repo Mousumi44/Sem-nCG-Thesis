@@ -1,82 +1,51 @@
-\section*{Sem-nCG Evaluation for Abstractive Summarization}
 
-This project adapts the \textbf{Sem-nCG} (Semantic Normalized Cumulative Gain) metric for evaluating \textbf{abstractive summaries}, specifically using the \textbf{CNN/DailyMail} dataset.
 
-Originally designed for extractive summaries, Sem-nCG is extended here with \textbf{semantic sentence alignment} to handle the paraphrasing and compression commonly found in abstractive summaries.
+# Sem-nCG Evaluation for Abstractive Summarization
 
-\subsection*{Project Structure}
+This project adapts the **Sem-nCG** (Semantic Normalized Cumulative Gain) metric for evaluating **abstractive summaries**, specifically using the **CNN/DailyMail** dataset.
 
-\begin{verbatim}
-Sem-nCG/
-├── pre-run.py                # Preprocessing: computes similarity and gain
-├── compute_score.py          # Calculates Sem-nCG@k using gain files and model summaries
-├── compute_senID()           # Rewritten for semantic sentence alignment using SBERT
-├── sample.json               # Input JSON: doc, reference, model summary
-├── output/
-│   ├── stsb_distilbert.txt       # Sentence similarity scores
-│   ├── stsb_distilbert_gain.txt  # Ranked sentence gains
-│   └── model.json                # Model summaries and sentence alignments
-├── requirements.txt
-├── README.md
-└── wiki/                    # (Optional) GitHub wiki for notes, dataset, experiments
-\end{verbatim}
 
-\subsection*{Setup}
+## Setup
 
-\begin{enumerate}
-  \item Create a virtual environment (Windows):
-  \begin{verbatim}
-  python -m venv venv
-  venv\Scripts\activate
-  \end{verbatim}
-  
-  \item Install dependencies:
-  \begin{verbatim}
-  pip install -r requirements.txt
-  \end{verbatim}
-\end{enumerate}
+1. Create a virtual environment (Windows):
+   ```powershell
+   python -m venv venv
+   venv\Scripts\activate
+   ```
+2. Install dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-\subsection*{Dataset}
+## Dataset
 
-\begin{itemize}
-  \item Dataset: \textbf{CNN/DailyMail} (abstractive)
-  \item Download stories from: \url{https://cs.nyu.edu/~kcho/DMQA/}
-  \item Use \texttt{data\_processing/pair\_data.py} from the SummEval repo:
-    \url{https://github.com/Yale-LILY/SummEval}
-\end{itemize}
+- **Dataset:** CNN/DailyMail (abstractive)
+- Download stories from: https://cs.nyu.edu/~kcho/DMQA/
 
-\subsection*{Evaluation Metric}
+## Evaluation Metric
 
-\begin{itemize}
-  \item \textbf{Sem-nCG@k} = Normalized Cumulative Gain for top-k model sentences
-  \item Semantic similarity computed via SBERT: \texttt{all-MiniLM-L6-v2}
-  \item Model summary sentences aligned to document sentences via cosine similarity
-  \item Document sentences are ranked by similarity to reference summary to define gains
-\end{itemize}
+- **Sem-nCG@k** = Normalized Cumulative Gain for top-k model sentences
 
-\subsection*{Wiki and Project Notes}
+## Wiki and Project Notes
 
 Use a GitHub Wiki or local notes for:
 
-\begin{itemize}
-  \item Meeting minutes
-  \item Dataset versions
-  \item Experiment logs (model configs, results)
-  \item Paper links and highlights
-  \item TODOs and research goals
-\end{itemize}
+- Meeting minutes
+- Dataset versions
+- Experiment logs (model configs, results)
+- Paper links and highlights
+- TODOs and research goals
 
-\subsection*{Credits}
+## Credits
 
-\begin{itemize}
-  \item Sem-nCG: Based on \textit{Findings of ACL 2022} paper: \url{https://aclanthology.org/2022.findings-acl.122}
-  \item Sentence embeddings: \url{https://www.sbert.net/}
-  \item Data annotations: SummEval \url{https://github.com/Yale-LILY/SummEval}
-\end{itemize}
+- Sem-nCG: Based on Findings of ACL 2022 paper: https://aclanthology.org/2022.findings-acl.122
+- Sentence embeddings: https://www.sbert.net/
+- Data annotations: SummEval https://github.com/Yale-LILY/SummEval
 
-\subsection*{Contact}
+## Contact
 
 Project by:
+Supervisor by:
 Email:
 
 For questions or collaboration, open an issue or contact via email.
