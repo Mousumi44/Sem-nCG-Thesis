@@ -169,6 +169,7 @@ def computeGain(dic_tuple):
         new_dic[sId] = (g*1.0)/denom
         g-=1
     return sorted(new_dic.items(), key = lambda i : i[1], reverse=True)
+
 def compute_gt():
   """
   write output to file

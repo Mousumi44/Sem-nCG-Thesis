@@ -5,7 +5,7 @@ import re
 
 # File paths
 input_file = "data_annotations_aligned.paired.jsonl"
-output_file = "prepared_data_v2.json"
+output_file = "prepared_data.json"
 
 converted_data = []
 
