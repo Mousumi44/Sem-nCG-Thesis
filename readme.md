@@ -34,8 +34,7 @@ This project adapts the **Sem-nCG** (Semantic Normalized Cumulative Gain) metric
 
 ## Contact
 
-- Project by:
-- Supervisor by:
-- Email:
+- Project by: Muhammad Farmal Khan (farmal.khan@tu-dortmund.de)
+- Supervised by: Mousoumi Akter (mousumi.akter@tu-dortmund.de)
 
 For questions or collaboration, open an issue or contact via email.
