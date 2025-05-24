@@ -15,10 +15,14 @@ from copy import deepcopy
 # import nltk
 # nltk.download('punkt_tab')
 
+from huggingface_hub import login
+login()
 
 # LLM Models to be used for computing sentence embeddings
 LLM_MODELS = [
-    ('sentence-transformers/all-MiniLM-L6-v2', 'sbert-mini'),
+    ('mistralai/Mistral-7B-v0.1', 'mistral'),
+    # ('meta-llama/Llama-2-7b-hf', 'llama2'),
+    # ('sentence-transformers/all-MiniLM-L6-v2', 'sbert-mini'),
     # ('sentence-transformers/distilbert-base-uncased', 'distilbert')
 ]
 
