@@ -2,7 +2,6 @@ import jsonlines
 import json
 import pandas as pd
 import ast
-import re
 
 k = 3
 
@@ -64,30 +63,11 @@ def computeNCG(gt, model):
     return scoreNCG(model_rel, gt_rel)
 
 
-
-# Evaluate for all LLM_MODELS from pre-run.py
-def get_llm_model_names():
-    # Read LLM_MODELS from pre-run.py and extract the model short names
-    with open('pre-run.py', 'r', encoding='utf-8') as f:
-        lines = f.readlines()
-    model_names = []
-    in_models = False
-    for line in lines:
-        if 'LLM_MODELS' in line and '=' in line:
-            in_models = True
-            continue
-        if in_models:
-            if ']' in line:
-                break
-            # Match lines like: ('model-path', 'shortname'),
-            match = re.search(r"'[^']+'\s*,\s*'([^']+)'", line)
-            if match:
-                model_names.append(match.group(1))
-    return model_names
-
+# Evaluate for all LLM_MODELS
 def eval_ncg():
     results = {}
-    LLM_MODELS = get_llm_model_names()
+    # LLM_MODELS = ['sbert-mini']
+    LLM_MODELS = ['mistral']
     for model_name in LLM_MODELS:
         gt_gain = read_gt_gain(model_name)
         model_senId = read_model_file()  # model.json is shared
