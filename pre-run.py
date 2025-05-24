@@ -15,9 +15,17 @@ from copy import deepcopy
 # import nltk
 # nltk.download('punkt_tab')
 
-# Load model from HuggingFace Hub
-tokenizer = AutoTokenizer.from_pretrained('sentence-transformers/stsb-distilbert-base')
-model = AutoModel.from_pretrained('sentence-transformers/stsb-distilbert-base')
+
+# LLM Models to be used for computing sentence embeddings
+LLM_MODELS = [
+    ('sentence-transformers/all-MiniLM-L6-v2', 'sbert-mini'),
+    # ('sentence-transformers/distilbert-base-uncased', 'distilbert')
+]
+
+def load_model(model_path):
+    tokenizer = AutoTokenizer.from_pretrained(model_path)
+    model = AutoModel.from_pretrained(model_path)
+    return tokenizer, model
 
 #Mean Pooling - Take attention mask into account for correct averaging
 def mean_pooling(model_output, attention_mask):
@@ -38,21 +46,16 @@ def doc_per_sent_similarity(doc_sent_embeddings, summary_sent_embeddings):
 
   return doc_sent_similarity
 
-def STSb_distilbert(doc_sent, ref_sent):
 
-  # Tokenize sentences
-  encoded_doc= tokenizer(doc_sent, padding=True, truncation=True, return_tensors='pt')
-  encoded_ref= tokenizer(ref_sent, padding=True, truncation=True, return_tensors='pt')
-
-  # Compute token embeddings
-  with torch.no_grad():
-      model_doc = model(**encoded_doc)
-      model_ref = model(**encoded_ref)
-
-  # Perform pooling. In this case, max pooling.
-  doc_sent_embeddings = mean_pooling(model_doc, encoded_doc['attention_mask'])
-  ref_sent_embeddings = mean_pooling(model_ref, encoded_ref['attention_mask'])
-  return doc_per_sent_similarity(doc_sent_embeddings, ref_sent_embeddings)
+def compute_similarity(doc_sent, ref_sent, tokenizer, model):
+    encoded_doc = tokenizer(doc_sent, padding=True, truncation=True, return_tensors='pt')
+    encoded_ref = tokenizer(ref_sent, padding=True, truncation=True, return_tensors='pt')
+    with torch.no_grad():
+        model_doc = model(**encoded_doc)
+        model_ref = model(**encoded_ref)
+    doc_sent_embeddings = mean_pooling(model_doc, encoded_doc['attention_mask'])
+    ref_sent_embeddings = mean_pooling(model_ref, encoded_ref['attention_mask'])
+    return doc_per_sent_similarity(doc_sent_embeddings, ref_sent_embeddings)
 
 def read_sample_file(file="sample.json"):
     """
@@ -87,18 +90,6 @@ def compute_senID(doc_sent, model_summary_sent): # might need to change to compu
 
     return model_sum_SI
 
-# def compute_senID(doc_sent, model_summary_sent):
-#   model_sum_SI = []
-
-#   for search in model_summary_sent:
-#     search = search.lower()
-#     search = re.sub(r"[^a-zA-Z0-9]","",search)
-#     for i, s in enumerate(doc_sent):
-#       s = s.lower()
-#       s = re.sub(r"[^a-zA-Z0-9]","",s)
-#       if search in s:
-#         model_sum_SI.append(i)
-#   return model_sum_SI
 
 def compute_model_senId(doc, model):
   """
@@ -118,31 +109,34 @@ def compute_model_senId(doc, model):
   df.to_json("./output/model.json", orient='records') #orient="records"/"index"
   return 
 
+
 def compute_doc_ref_similarity():
-  dir = "output"
-  if not os.path.exists(dir):
-    os.makedirs(dir)
-  fn = "./output/stsb_distilbert.txt"
-  fw = open(fn,"a")
-  doc, ref, model = read_sample_file()
-  compute_model_senId(doc, model)
+    dir = "output"
+    if not os.path.exists(dir):
+        os.makedirs(dir)
+    doc, ref, model = read_sample_file()
+    compute_model_senId(doc, model)
 
-  for i in range(len(doc)):
-    doc_sent = tokenize.sent_tokenize(doc[i])
-    ref_sent = tokenize.sent_tokenize(ref[i])
-    
-    sim = STSb_distilbert(doc_sent, ref_sent)
-    sim = {k: float(v) for k, v in sim.items()}
-    json.dump(sim, fw)
-    fw.write("\n")
+    for model_path, model_name in LLM_MODELS:
+        fn = f"./output/{model_name}_similarity.txt"
+        tokenizer, model_obj = load_model(model_path)
+        with open(fn, "w") as fw:
+            for i in range(len(doc)):
+                doc_sent = tokenize.sent_tokenize(doc[i])
+                ref_sent = tokenize.sent_tokenize(ref[i])
+                sim = compute_similarity(doc_sent, ref_sent, tokenizer, model_obj)
+                sim = {k: float(v) for k, v in sim.items()}
+                json.dump(sim, fw)
+                fw.write("\n")
 
-def read_file():
+
+def read_file(model_name):
     """
-    #read correspdonding embed_type.txt file#
+    #read corresponding <model_name>_similarity.txt file#
     :rtype Dataframe: fileId, dictSim -> sim of doc sentences with reference
     """
     dir = "./output/"
-    fn = dir+"stsb_distilbert.txt"
+    fn = dir+f"{model_name}_similarity.txt"
 
     dicSim = []
     with open(fn, "r") as file:
@@ -170,22 +164,25 @@ def computeGain(dic_tuple):
         g-=1
     return sorted(new_dic.items(), key = lambda i : i[1], reverse=True)
 
+
 def compute_gt():
-  """
-  write output to file
-  """
-  dir = "./output/"
-  fn = dir+"stsb_distilbert_gain.txt"
-  fw = open(fn, "a")
-  df = read_file()
-  samples = len(df)
-  for i in range(samples):
-    prev = sorted(df["DictSim"][i].items(), key=lambda i: i[1], reverse=True)
-    fw.write(str(computeGain(prev)))
-    fw.write("\n")
-    print(f'Current Sample {i}')
+    """
+    write output to file for each model
+    """
+    dir = "./output/"
+    for _, model_name in LLM_MODELS:
+        fn = dir+f"{model_name}_gain.txt"
+        df = read_file(model_name)
+        samples = len(df)
+        with open(fn, "w") as fw:
+            for i in range(samples):
+                prev = sorted(df["DictSim"][i].items(), key=lambda i: i[1], reverse=True)
+                fw.write(str(computeGain(prev)))
+                fw.write("\n")
+                print(f'[{model_name}] Current Sample {i}')
+
 
 
 if __name__=="__main__":
-  compute_doc_ref_similarity()
-  compute_gt()
+    compute_doc_ref_similarity()
+    compute_gt()

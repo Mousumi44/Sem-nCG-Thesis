@@ -5,13 +5,14 @@ import ast
 
 k = 3
 
-def read_gt_gain():
+
+# Read gain file for a given model
+def read_gt_gain(model_name):
     """
-    :rtype: List[List[tuple]] --> 252 length
+    :rtype: List[List[tuple]]
     """
     dir = "./output/"
-    fn = dir+"stsb_distilbert_gain.txt"
-    
+    fn = dir+f"{model_name}_gain.txt"
     gt_gain = []
     with open(fn, "r") as file:
         for line in file:
@@ -61,23 +62,28 @@ def computeNCG(gt, model):
         model_rel.append(gt_dic[model[j]]) #take k sentences for model
     return scoreNCG(model_rel, gt_rel)
 
+
+# Evaluate for all LLM_MODELS
 def eval_ncg():
-    gt_gain = read_gt_gain()
-    model_senId = read_model_file()
-    res = []
-    for i in range(len(gt_gain)):
-        if model_senId[i] is None:
-            print(f"[SKIP] Sample {i}: model_senId is None")
-            continue
-        if len(model_senId[i]) < k:
-            print(f"[SKIP] Sample {i}: model_senId has less than k elements")
-            continue
-        score = computeNCG(gt_gain[i], model_senId[i])
-        if score is not None:
-            res.append(score)
-    # key_ = args.embed+"_"+args.type+"_lambda_"+str(args.lambda_)
-    key_ = "Sem-nCG@3"
-    return {key_:res}
+    results = {}
+    LLM_MODELS = ['sbert-mini']
+    for model_name in LLM_MODELS:
+        gt_gain = read_gt_gain(model_name)
+        model_senId = read_model_file()  # model.json is shared
+        res = []
+        for i in range(len(gt_gain)):
+            if model_senId[i] is None:
+                print(f"[SKIP] Sample {i}: model_senId is None")
+                continue
+            if len(model_senId[i]) < k:
+                print(f"[SKIP] Sample {i}: model_senId has less than k elements")
+                continue
+            score = computeNCG(gt_gain[i], model_senId[i])
+            if score is not None:
+                res.append(score)
+        results[f"Sem-nCG@3_{model_name}"] = res
+    return results
+
 
 if __name__=='__main__':
     with jsonlines.open("score.jsonl", "a") as writer:   # for writing
