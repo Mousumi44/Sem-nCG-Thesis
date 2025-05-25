@@ -26,13 +26,12 @@ login(token=token)
 # LLM Models to be used for computing sentence embeddings
 LLM_MODELS = [
     ('meta-llama/Llama-3.2-1B', 'llama3.2'),
+    # ("meta-llama/Llama-2-13b-hf",'llama2'),
     # ('google/gemma-3-1b-it', 'gemma-3-1b-it'),
     # ('mistralai/Mistral-7B-v0.1', 'mistral'),
-    # ("meta-llama/Llama-3.2-1B", "llama3.2-1b"),
     # ("apple/OpenELM-3B", "openelm-3b"),
     # ("allenai/OLMo-7B", "olmo-7b"),
     # ("Qwen/Qwen3-0.6B", "qwen3-0.6b"),
-    # ("meta-llama/Llama-2-13b-hf",'llama2-13b'),
     # ('sentence-transformers/all-MiniLM-L6-v2', 'sbert-mini'),
     # ('sentence-transformers/distilbert-base-uncased', 'distilbert')
 ]
@@ -44,7 +43,8 @@ def load_model(model_path):
             tokenizer.pad_token = tokenizer.eos_token
         else:
             tokenizer.add_special_tokens({'pad_token': '[PAD]'})
-    model = AutoModel.from_pretrained(model_path)
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    model = AutoModel.from_pretrained(model_path).to(device)
     return tokenizer, model
 
 #Mean Pooling - Take attention mask into account for correct averaging
@@ -60,16 +60,20 @@ def doc_per_sent_similarity(doc_sent_embeddings, summary_sent_embeddings):
   for e1 in doc_sent_embeddings:
     e2_cos_sum = 0
     for e2 in summary_sent_embeddings:
-      e2_cos_sum+=cosine_similarity(e1.reshape(1,-1), e2.reshape(1,-1))[0][0]
-    doc_sent_similarity[sen_id] = e2_cos_sum/summary_sent_embeddings.shape[0]
-    sen_id +=1
+      # Ensure tensors are on CPU before converting to numpy
+      e1_cpu = e1.detach().cpu().numpy().reshape(1, -1)
+      e2_cpu = e2.detach().cpu().numpy().reshape(1, -1)
+      e2_cos_sum += cosine_similarity(e1_cpu, e2_cpu)[0][0]
+    doc_sent_similarity[sen_id] = e2_cos_sum / summary_sent_embeddings.shape[0]
+    sen_id += 1
 
   return doc_sent_similarity
 
 
 def compute_similarity(doc_sent, ref_sent, tokenizer, model):
-    encoded_doc = tokenizer(doc_sent, padding=True, truncation=True, return_tensors='pt')
-    encoded_ref = tokenizer(ref_sent, padding=True, truncation=True, return_tensors='pt')
+    device = next(model.parameters()).device
+    encoded_doc = tokenizer(doc_sent, padding=True, truncation=True, return_tensors='pt').to(device)
+    encoded_ref = tokenizer(ref_sent, padding=True, truncation=True, return_tensors='pt').to(device)
     with torch.no_grad():
         model_doc = model(**encoded_doc)
         model_ref = model(**encoded_ref)
