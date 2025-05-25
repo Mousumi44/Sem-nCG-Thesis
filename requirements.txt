@@ -5,3 +5,4 @@ transformers
 nltk
 jsonlines
 sentence-transformers
+python-dotenv

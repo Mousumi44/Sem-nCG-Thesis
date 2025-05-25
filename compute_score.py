@@ -67,7 +67,7 @@ def computeNCG(gt, model):
 def eval_ncg():
     results = {}
     # LLM_MODELS = ['sbert-mini']
-    LLM_MODELS = ['mistral']
+    LLM_MODELS = ['llama3.2']
     for model_name in LLM_MODELS:
         gt_gain = read_gt_gain(model_name)
         model_senId = read_model_file()  # model.json is shared

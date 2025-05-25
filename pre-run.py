@@ -11,23 +11,39 @@ from sentence_transformers import SentenceTransformer
 import sys
 import ast
 from copy import deepcopy
+from dotenv import load_dotenv
+
 
 # import nltk
 # nltk.download('punkt_tab')
 
+load_dotenv() 
+token = os.getenv("HF_TOKEN")  
+
 from huggingface_hub import login
-login()
+login(token=token)
 
 # LLM Models to be used for computing sentence embeddings
 LLM_MODELS = [
-    ('mistralai/Mistral-7B-v0.1', 'mistral'),
-    # ('meta-llama/Llama-2-7b-hf', 'llama2'),
+    ('meta-llama/Llama-3.2-1B', 'llama3.2'),
+    # ('google/gemma-3-1b-it', 'gemma-3-1b-it'),
+    # ('mistralai/Mistral-7B-v0.1', 'mistral'),
+    # ("meta-llama/Llama-3.2-1B", "llama3.2-1b"),
+    # ("apple/OpenELM-3B", "openelm-3b"),
+    # ("allenai/OLMo-7B", "olmo-7b"),
+    # ("Qwen/Qwen3-0.6B", "qwen3-0.6b"),
+    # ("meta-llama/Llama-2-13b-hf",'llama2-13b'),
     # ('sentence-transformers/all-MiniLM-L6-v2', 'sbert-mini'),
     # ('sentence-transformers/distilbert-base-uncased', 'distilbert')
 ]
 
 def load_model(model_path):
     tokenizer = AutoTokenizer.from_pretrained(model_path)
+    if tokenizer.pad_token is None:
+        if tokenizer.eos_token is not None:
+            tokenizer.pad_token = tokenizer.eos_token
+        else:
+            tokenizer.add_special_tokens({'pad_token': '[PAD]'})
     model = AutoModel.from_pretrained(model_path)
     return tokenizer, model
 
