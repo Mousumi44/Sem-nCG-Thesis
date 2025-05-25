@@ -66,11 +66,30 @@ def computeNCG(gt, model):
 # Evaluate for all LLM_MODELS
 def eval_ncg():
     results = {}
-    # LLM_MODELS = ['sbert-mini']
-    LLM_MODELS = ['llama3.2']
+    # List all model names you want to evaluate
+    LLM_MODELS = [
+        'llama3.2',
+        # 'llama2',
+        # 'gemma-3-1b-it',
+        # 'mistral',
+        # 'openelm-3b',
+        # 'olmo-7b',
+        # 'qwen3-0.6b',
+        # 'sbert-mini',
+        # 'stsb_distilbert',
+    ]
     for model_name in LLM_MODELS:
-        gt_gain = read_gt_gain(model_name)
-        model_senId = read_model_file()  # model.json is shared
+        print(f"[INFO] Evaluating model: {model_name}")
+        try:
+            gt_gain = read_gt_gain(model_name)
+        except FileNotFoundError:
+            print(f"[SKIP] Model {model_name}: gain file not found")
+            continue
+        try:
+            model_senId = read_model_file()  # model.json is shared
+        except Exception as e:
+            print(f"[SKIP] Model {model_name}: model file error: {e}")
+            continue
         res = []
         for i in range(len(gt_gain)):
             if model_senId[i] is None:

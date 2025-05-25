@@ -142,6 +142,7 @@ def compute_doc_ref_similarity():
     compute_model_senId(doc, model)
 
     for model_path, model_name in LLM_MODELS:
+        print(f"[INFO] Running model: {model_name} ({model_path})")
         fn = f"./output/{model_name}_similarity.txt"
         tokenizer, model_obj = load_model(model_path)
         with open(fn, "w") as fw:

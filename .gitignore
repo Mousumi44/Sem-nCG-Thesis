@@ -3,7 +3,7 @@ venv/
 .vscode/
 .pytest_cache/
 Algorithm_working.txt
-discussion_points.txt
+notes.txt
 __pycache__/
 # sample.json
 sample_1.jsonl
