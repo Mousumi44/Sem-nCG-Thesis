@@ -68,12 +68,12 @@ def eval_ncg():
     results = {}
     # List all model names you want to evaluate
     LLM_MODELS = [
-        'llama3.2',
+        # 'llama3.2',
         # 'llama2',
         # 'gemma-3-1b-it',
         # 'mistral',
         # 'openelm-3b',
-        # 'olmo-7b',
+        'olmo-2-1b',
         # 'qwen3-0.6b',
         # 'sbert-mini',
         # 'stsb_distilbert',

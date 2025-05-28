@@ -6,7 +6,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 import torch
 import os
 from nltk import tokenize
-from transformers import AutoTokenizer, AutoModel
+from transformers import AutoTokenizer, AutoModel, AutoModelForCausalLM, LlamaTokenizer
 from sentence_transformers import SentenceTransformer
 import sys
 import ast
@@ -25,27 +25,39 @@ login(token=token)
 
 # LLM Models to be used for computing sentence embeddings
 LLM_MODELS = [
-    ('meta-llama/Llama-3.2-1B', 'llama3.2'),
+    # ('meta-llama/Llama-3.2-1B', 'llama3.2'),
     # ("meta-llama/Llama-2-13b-hf",'llama2'),
     # ('google/gemma-3-1b-it', 'gemma-3-1b-it'),
     # ('mistralai/Mistral-7B-v0.1', 'mistral'),
-    # ("apple/OpenELM-3B", "openelm-3b"),
-    # ("allenai/OLMo-7B", "olmo-7b"),
+    ("apple/OpenELM-270M", "openelm"),
+    # ("allenai/OLMo-2-0425-1B", "olmo-2-1b"),
     # ("Qwen/Qwen3-0.6B", "qwen3-0.6b"),
     # ('sentence-transformers/all-MiniLM-L6-v2', 'sbert-mini'),
     # ('sentence-transformers/distilbert-base-uncased', 'distilbert')
 ]
 
 def load_model(model_path):
-    tokenizer = AutoTokenizer.from_pretrained(model_path)
-    if tokenizer.pad_token is None:
-        if tokenizer.eos_token is not None:
-            tokenizer.pad_token = tokenizer.eos_token
-        else:
-            tokenizer.add_special_tokens({'pad_token': '[PAD]'})
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    model = AutoModel.from_pretrained(model_path).to(device)
-    return tokenizer, model
+    if "openelm" in model_path.lower():
+        # Use LlamaTokenizer as a compatible tokenizer for OpenELM
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        model = AutoModelForCausalLM.from_pretrained(model_path, trust_remote_code=True).to(device)
+        tokenizer = LlamaTokenizer.from_pretrained("hf-internal-testing/llama-tokenizer")
+        if tokenizer.pad_token is None:
+            if tokenizer.eos_token is not None:
+                tokenizer.pad_token = tokenizer.eos_token
+            else:
+                tokenizer.add_special_tokens({'pad_token': '[PAD]'})
+        return tokenizer, model
+    else:
+        tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
+        if tokenizer.pad_token is None:
+            if tokenizer.eos_token is not None:
+                tokenizer.pad_token = tokenizer.eos_token
+            else:
+                tokenizer.add_special_tokens({'pad_token': '[PAD]'})
+        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        model = AutoModel.from_pretrained(model_path, trust_remote_code=True).to(device)
+        return tokenizer, model
 
 #Mean Pooling - Take attention mask into account for correct averaging
 def mean_pooling(model_output, attention_mask):
@@ -72,8 +84,8 @@ def doc_per_sent_similarity(doc_sent_embeddings, summary_sent_embeddings):
 
 def compute_similarity(doc_sent, ref_sent, tokenizer, model):
     device = next(model.parameters()).device
-    encoded_doc = tokenizer(doc_sent, padding=True, truncation=True, return_tensors='pt').to(device)
-    encoded_ref = tokenizer(ref_sent, padding=True, truncation=True, return_tensors='pt').to(device)
+    encoded_doc = tokenizer(doc_sent, padding=True, truncation=True, max_length=512, return_tensors='pt').to(device)
+    encoded_ref = tokenizer(ref_sent, padding=True, truncation=True, max_length=512, return_tensors='pt').to(device)
     with torch.no_grad():
         model_doc = model(**encoded_doc)
         model_ref = model(**encoded_ref)
