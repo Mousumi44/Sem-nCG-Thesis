@@ -4,6 +4,9 @@
 
 This project adapts the **Sem-nCG** (Semantic Normalized Cumulative Gain) metric for evaluating **abstractive summaries**, specifically using the **CNN/DailyMail** dataset.
 
+## Meeting notes
+
+Link: https://docs.google.com/document/d/14Vnd6cudsuq0BEn5OQaOyqqRJqkU4Ov87VTqEmlWU1w/edit?usp=sharing
 
 ## Setup
 
