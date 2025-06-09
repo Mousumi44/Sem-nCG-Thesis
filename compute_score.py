@@ -66,17 +66,24 @@ def computeNCG(gt, model):
 # Evaluate for all LLM_MODELS
 def eval_ncg():
     results = {}
-    # List all model names you want to evaluate
     LLM_MODELS = [
+        # LLMs
         # 'llama3.2',
         # 'llama2',
         # 'gemma-3-1b-it',
         # 'mistral',
-        # 'openelm-3b',
-        'olmo-2-1b',
+        # 'openelm',
+        # 'olmo-2-1b',
         # 'qwen3-0.6b',
+        
+        # Classical models
         # 'sbert-mini',
-        # 'stsb_distilbert',
+        # 'laser',
+        # 'use',
+        # 'roberta',
+        # 'sbert-l',
+        'simcse',
+        # 'infersent'
     ]
     for model_name in LLM_MODELS:
         print(f"[INFO] Evaluating model: {model_name}")

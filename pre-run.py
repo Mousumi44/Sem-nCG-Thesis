@@ -8,6 +8,7 @@ import os
 from nltk import tokenize
 from transformers import AutoTokenizer, AutoModel, AutoModelForCausalLM, LlamaTokenizer
 from sentence_transformers import SentenceTransformer
+# from laser_encoders import LaserEncoderPipeline
 import sys
 import ast
 from copy import deepcopy
@@ -23,17 +24,26 @@ token = os.getenv("HF_TOKEN")
 from huggingface_hub import login
 login(token=token)
 
-# LLM Models to be used for computing sentence embeddings
+# LLM Models and Classical Models to be used for computing sentence embeddings
 LLM_MODELS = [
+
+    # LLMs (uncomment as needed)
     # ('meta-llama/Llama-3.2-1B', 'llama3.2'),
     # ("meta-llama/Llama-2-13b-hf",'llama2'),
     # ('google/gemma-3-1b-it', 'gemma-3-1b-it'),
     # ('mistralai/Mistral-7B-v0.1', 'mistral'),
-    ("apple/OpenELM-270M", "openelm"),
+    # ("apple/OpenELM-270M", "openelm"),
     # ("allenai/OLMo-2-0425-1B", "olmo-2-1b"),
     # ("Qwen/Qwen3-0.6B", "qwen3-0.6b"),
+
+    # Classical models
     # ('sentence-transformers/all-MiniLM-L6-v2', 'sbert-mini'),
-    # ('sentence-transformers/distilbert-base-uncased', 'distilbert')
+    # ('sentence-transformers/all-mpnet-base-v2', 'sbert-l'),
+    # ('laserembeddings', 'laser'),
+    # ('universal-sentence-encoder', 'use'),
+    # ('roberta-base', 'roberta'),
+    ('princeton-nlp/sup-simcse-roberta-base', 'simcse'),
+    # ('InferSent/encoder/infersent2.pkl', 'infersent'),
 ]
 
 def load_model(model_path):
@@ -48,6 +58,11 @@ def load_model(model_path):
             else:
                 tokenizer.add_special_tokens({'pad_token': '[PAD]'})
         return tokenizer, model
+    # elif "laser" in model_path.lower():
+    #     # For LASER, we use LaserEncoderPipeline which handles both tokenization and encoding
+    #     encoder = LaserEncoderPipeline()
+    #     # Return encoder as both tokenizer and model since it handles both functions
+    #     return encoder, encoder
     else:
         tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
         if tokenizer.pad_token is None:
@@ -83,6 +98,13 @@ def doc_per_sent_similarity(doc_sent_embeddings, summary_sent_embeddings):
 
 
 def compute_similarity(doc_sent, ref_sent, tokenizer, model):
+    # For LASER models
+    # if isinstance(tokenizer, LaserEncoderPipeline):
+    #     doc_sent_embeddings = tokenizer.encode_sentences(doc_sent)
+    #     ref_sent_embeddings = tokenizer.encode_sentences(ref_sent)
+    #     return doc_per_sent_similarity(torch.from_numpy(doc_sent_embeddings), torch.from_numpy(ref_sent_embeddings))
+
+    # For other models
     device = next(model.parameters()).device
     encoded_doc = tokenizer(doc_sent, padding=True, truncation=True, max_length=512, return_tensors='pt').to(device)
     encoded_ref = tokenizer(ref_sent, padding=True, truncation=True, max_length=512, return_tensors='pt').to(device)
