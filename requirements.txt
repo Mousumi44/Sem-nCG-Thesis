@@ -6,3 +6,6 @@ nltk
 jsonlines
 sentence-transformers
 python-dotenv
+tensorflow
+tensorflow-hub
+huggingface-hub
