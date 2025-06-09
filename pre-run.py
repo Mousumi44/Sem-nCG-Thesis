@@ -13,6 +13,8 @@ import sys
 import ast
 from copy import deepcopy
 from dotenv import load_dotenv
+import tensorflow_hub as hub
+import tensorflow as tf
 
 
 # import nltk
@@ -40,14 +42,20 @@ LLM_MODELS = [
     # ('sentence-transformers/all-MiniLM-L6-v2', 'sbert-mini'),
     # ('sentence-transformers/all-mpnet-base-v2', 'sbert-l'),
     # ('laserembeddings', 'laser'),
-    # ('universal-sentence-encoder', 'use'),
+    ('universal-sentence-encoder', 'use'),
     # ('roberta-base', 'roberta'),
-    ('princeton-nlp/sup-simcse-roberta-base', 'simcse'),
+    # ('princeton-nlp/sup-simcse-roberta-base', 'simcse'),
     # ('InferSent/encoder/infersent2.pkl', 'infersent'),
 ]
 
-def load_model(model_path):
-    if "openelm" in model_path.lower():
+def load_model(model_path):    
+    if model_path == "universal-sentence-encoder":
+        # For Universal Sentence Encoder, load from TF Hub
+        module_url = "https://tfhub.dev/google/universal-sentence-encoder/4"
+        model = hub.load(module_url)
+        # Return model as both tokenizer and model since USE handles both functions
+        return model, model
+    elif "openelm" in model_path.lower():
         # Use LlamaTokenizer as a compatible tokenizer for OpenELM
         device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         model = AutoModelForCausalLM.from_pretrained(model_path, trust_remote_code=True).to(device)
@@ -98,13 +106,14 @@ def doc_per_sent_similarity(doc_sent_embeddings, summary_sent_embeddings):
 
 
 def compute_similarity(doc_sent, ref_sent, tokenizer, model):
-    # For LASER models
-    # if isinstance(tokenizer, LaserEncoderPipeline):
-    #     doc_sent_embeddings = tokenizer.encode_sentences(doc_sent)
-    #     ref_sent_embeddings = tokenizer.encode_sentences(ref_sent)
-    #     return doc_per_sent_similarity(torch.from_numpy(doc_sent_embeddings), torch.from_numpy(ref_sent_embeddings))
+    # For USE model - it handles both tokenization and embedding
+    if hasattr(model, '_is_hub_module_v1'):
+        doc_sent_embeddings = model(tf.constant(doc_sent))
+        ref_sent_embeddings = model(tf.constant(ref_sent))
+        return doc_per_sent_similarity(torch.from_numpy(doc_sent_embeddings.numpy()), 
+                                    torch.from_numpy(ref_sent_embeddings.numpy()))
 
-    # For other models
+    # For other models that use PyTorch
     device = next(model.parameters()).device
     encoded_doc = tokenizer(doc_sent, padding=True, truncation=True, max_length=512, return_tensors='pt').to(device)
     encoded_ref = tokenizer(ref_sent, padding=True, truncation=True, max_length=512, return_tensors='pt').to(device)

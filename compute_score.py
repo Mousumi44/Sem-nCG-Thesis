@@ -79,10 +79,10 @@ def eval_ncg():
         # Classical models
         # 'sbert-mini',
         # 'laser',
-        # 'use',
+        'use',
         # 'roberta',
         # 'sbert-l',
-        'simcse',
+        # 'simcse',
         # 'infersent'
     ]
     for model_name in LLM_MODELS:
