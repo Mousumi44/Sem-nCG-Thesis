@@ -9,3 +9,4 @@ python-dotenv
 tensorflow
 tensorflow-hub
 huggingface-hub
+openai

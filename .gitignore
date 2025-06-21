@@ -7,7 +7,6 @@ notes.txt
 __pycache__/
 # sample.json
 sample_1.jsonl
-data_annotations_aligned.paired.jsonl
 score.jsonl
 *.log
 *.tmp
