@@ -31,7 +31,9 @@ with open(score_file, "r", encoding="utf-8") as f:
             model_scores[model] = scores
 
 # 3. Compute Kendall's tau for each model and each annotation type
+
 print("Kendall's tau between average human annotation and Sem-nCG scores:")
+results = []
 for model, scores in model_scores.items():
     print(f"\nModel: {model}")
     for key in human_scores:
@@ -39,7 +41,14 @@ for model, scores in model_scores.items():
         valid = [(h, s) for h, s in zip(human_scores[key], scores) if not np.isnan(h)]
         if not valid or len(valid) < 2:
             print(f"  {key}: Not enough data")
+            results.append({"model": model, "annotation": key, "tau": None, "p": None, "note": "Not enough data"})
             continue
         h_vals, s_vals = zip(*valid)
         tau, p = kendalltau(h_vals, s_vals)
         print(f"  {key}: tau={tau:.3f}, p={p:.3g}")
+        results.append({"model": model, "annotation": key, "tau": tau, "p": p, "note": ""})
+
+# Save results to CSV
+import pandas as pd
+df = pd.DataFrame(results)
+df.to_csv("./output/kendall_results.csv", index=False)
