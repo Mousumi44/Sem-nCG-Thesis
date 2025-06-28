@@ -32,14 +32,14 @@ LLM_MODELS = [
     # LLMs (uncomment as needed)
     # ('meta-llama/Llama-3.2-1B', 'llama3.2'),
     # ("meta-llama/Llama-2-13b-hf",'llama2'),
-    # ('google/gemma-3-1b-it', 'gemma-3-1b-it'),
+    ('google/gemma-3-1b-it', 'gemma-3-1b-it'),
     # ('mistralai/Mistral-7B-v0.1', 'mistral'),
     # ("apple/OpenELM-270M", "openelm"),
     # ("allenai/OLMo-2-0425-1B", "olmo-2-1b"),
     # ("Qwen/Qwen3-0.6B", "qwen3-0.6b"),
 
     # Classical models
-    ('sentence-transformers/all-MiniLM-L6-v2', 'sbert-mini'),
+    # ('sentence-transformers/all-MiniLM-L6-v2', 'sbert-mini'),
     # ('sentence-transformers/all-mpnet-base-v2', 'sbert-l'),
     # ('laserembeddings', 'laser'),
     # ('universal-sentence-encoder', 'use'),
@@ -124,11 +124,14 @@ def compute_similarity(doc_sent, ref_sent, tokenizer, model):
     ref_sent_embeddings = mean_pooling(model_ref, encoded_ref['attention_mask'])
     return doc_per_sent_similarity(doc_sent_embeddings, ref_sent_embeddings)
 
-def read_sample_file(file="./data/processed_data.json"):
+def read_sample_file(file="./data/processed_data.json", summary_type=None):
     """
+    :param summary_type: "Extractive", "Abstractive", or None for all
     :rtype: sample.json -> [{"Doc": str, "Reference": str, "model": str},...], Doc->List[str], Reference->List[str], model->List[str]
     """
     data = json.load(open(file, "r"))
+    if summary_type:
+        data = [d for d in data if d.get("summary_type") == summary_type]
     df = pd.DataFrame.from_dict(data)
     return df["Doc"], df["Reference"], df["model"]
 
@@ -152,59 +155,79 @@ def compute_senID(doc_sent, model_summary_sent): # might need to change to compu
     # assert len(model_sum_SI) == len(model_summary_sent)
     
     if len(model_sum_SI) < len(model_summary_sent):  # changed due to abstractive summaries
-      print(f"[SKIP] Only matched {len(model_sum_SI)} of {len(model_summary_sent)}")
-      return None
+        print(f"[SKIP] Only matched {len(model_sum_SI)} of {len(model_summary_sent)}")
+        return None
 
     return model_sum_SI
 
 
-def compute_model_senId(doc, model):
-  """
-  :type model: List[str]
-  :rtype: List[List[int]] -> write model and sen_Id to model.json file
-  """
-  modelSenId = []
-  for i in range(len(model)):
-    doc_sent = tokenize.sent_tokenize(doc[i])
-    model_summary_sent = tokenize.sent_tokenize(model[i])
-    model_sum_SI = compute_senID(doc_sent, model_summary_sent)
-    modelSenId.append(model_sum_SI)
-  df = pd.DataFrame(
-    {'model': model,
-     'modelSenID': modelSenId
-    })
-  df.to_json("./models/model.json", orient='records') #orient="records"/"index"
-  return 
+def compute_model_senId(doc, model, summary_type=None):
+    """
+    :type model: List[str]
+    :param summary_type: "Extractive" or "Abstractive" or None
+    :rtype: List[List[int]] -> write model and sen_Id to model_<summary_type>.json file
+    """
+    modelSenId = []
+    for i in range(len(model)):
+        doc_sent = tokenize.sent_tokenize(doc[i])
+        model_summary_sent = tokenize.sent_tokenize(model[i])
+        model_sum_SI = compute_senID(doc_sent, model_summary_sent)
+        modelSenId.append(model_sum_SI)
+    df = pd.DataFrame(
+        {'model': model,
+         'modelSenID': modelSenId
+        })
+    if summary_type:
+        out_path = f"./models/model_{summary_type.lower()}.json"
+    else:
+        out_path = "./models/model.json"
+    df.to_json(out_path, orient='records') #orient="records"/"index"
+    print(f"[INFO] Saved model sentence IDs to {out_path}")
+    return
 
 
 def compute_doc_ref_similarity():
     dir = "output"
     if not os.path.exists(dir):
         os.makedirs(dir)
-    doc, ref, model = read_sample_file()
-    compute_model_senId(doc, model)
 
-    for model_path, model_name in LLM_MODELS:
-        print(f"[INFO] Running model: {model_name} ({model_path})")
-        fn = f"./models/{model_name}_similarity.txt"
-        tokenizer, model_obj = load_model(model_path)
-        with open(fn, "w") as fw:
-            for i in range(len(doc)):
-                doc_sent = tokenize.sent_tokenize(doc[i])
-                ref_sent = tokenize.sent_tokenize(ref[i])
-                sim = compute_similarity(doc_sent, ref_sent, tokenizer, model_obj)
-                sim = {k: float(v) for k, v in sim.items()}
-                json.dump(sim, fw)
-                fw.write("\n")
+    # Set summary_types here:
+
+    # summary_types = ["Extractive"]
+    summary_types = ["Abstractive"]
+    # summary_types = ["Extractive", "Abstractive"]  #both
+
+    for summary_type in summary_types:
+        print(f"[INFO] Processing summary_type: {summary_type}")
+        doc, ref, model = read_sample_file(summary_type=summary_type)
+        compute_model_senId(doc, model, summary_type=summary_type)
+
+        for model_path, model_name in LLM_MODELS:
+            print(f"[INFO] Running model: {model_name} ({model_path}) [{summary_type}]")
+            fn = f"./models/{model_name}_similarity_{summary_type.lower()}.txt"
+            tokenizer, model_obj = load_model(model_path)
+            with open(fn, "w") as fw:
+                for i in range(len(doc)):
+                    doc_sent = tokenize.sent_tokenize(doc[i])
+                    ref_sent = tokenize.sent_tokenize(ref[i])
+                    sim = compute_similarity(doc_sent, ref_sent, tokenizer, model_obj)
+                    sim = {k: float(v) for k, v in sim.items()}
+                    json.dump(sim, fw)
+                    fw.write("\n")
+            print(f"[INFO] Saved similarity scores to {fn}")
 
 
-def read_file(model_name):
+def read_file(model_name, summary_type=None):
     """
-    #read corresponding <model_name>_similarity.txt file#
+    #read corresponding <model_name>_similarity[_summary_type].txt file#
+    :param summary_type: "Extractive", "Abstractive", or None
     :rtype Dataframe: fileId, dictSim -> sim of doc sentences with reference
     """
     dir = "./models/"
-    fn = dir+f"{model_name}_similarity.txt"
+    if summary_type:
+        fn = dir+f"{model_name}_similarity_{summary_type.lower()}.txt"
+    else:
+        fn = dir+f"{model_name}_similarity.txt"
 
     dicSim = []
     with open(fn, "r") as file:
@@ -233,24 +256,38 @@ def computeGain(dic_tuple):
     return sorted(new_dic.items(), key = lambda i : i[1], reverse=True)
 
 
+
 def compute_gt():
     """
-    write output to file for each model
+    Write output to file for each model and summary_type
     """
     dir = "./models/"
-    for _, model_name in LLM_MODELS:
-        fn = dir+f"{model_name}_gain.txt"
-        df = read_file(model_name)
-        samples = len(df)
-        with open(fn, "w") as fw:
-            for i in range(samples):
-                prev = sorted(df["DictSim"][i].items(), key=lambda i: i[1], reverse=True)
-                fw.write(str(computeGain(prev)))
-                fw.write("\n")
-                print(f'[{model_name}] Current Sample {i}')
+    # Set summary_types here: comment/uncomment as needed
+    # summary_types = ["Extractive"]
+    summary_types = ["Abstractive"]
+    # summary_types = ["Abstractive", "Extractive"]  # both
+
+    for summary_type in summary_types:
+        for _, model_name in LLM_MODELS:
+            fn = dir+f"{model_name}_gain_{summary_type.lower()}.txt"
+            try:
+                df = read_file(model_name, summary_type=summary_type)
+            except FileNotFoundError:
+                print(f"[SKIP] {model_name} {summary_type}: similarity file not found, skipping gain computation.")
+                continue
+            samples = len(df)
+            with open(fn, "w") as fw:
+                for i in range(samples):
+                    prev = sorted(df["DictSim"][i].items(), key=lambda i: i[1], reverse=True)
+                    fw.write(str(computeGain(prev)))
+                    fw.write("\n")
+                    print(f'[{model_name}][{summary_type}] Current Sample {i}')
 
 
 
 if __name__=="__main__":
+    # Choose which steps to run by commenting/uncommenting below
+    # compute_doc_ref_similarity()  # Only similarity
+    # compute_gt()                  # Only gain
     compute_doc_ref_similarity()
     compute_gt()

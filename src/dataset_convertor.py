@@ -6,8 +6,36 @@ import re
 input_file = "./data/raw_data.jsonl"
 output_file = "./data/processed_data.json"  # Output as a single JSON file
 
-converted = []
 
+# Mapping from model_id to summary type
+model_type_map = {
+    "M0": "Extractive",
+    "M1": "Extractive",
+    "M2": "Extractive",
+    "M3": "Extractive",
+    "M4": "Extractive",
+    "M5": "Extractive",
+    "M6": "Extractive",
+    "M7": "Extractive",
+    "M8": "Abstractive",
+    "M9": "Abstractive",
+    "M10": "Abstractive",
+    "M11": "Abstractive",
+    "M12": "Abstractive",
+    "M13": "Abstractive",
+    "M14": "Abstractive",
+    "M15": "Abstractive",
+    "M16": "Abstractive",
+    "M17": "Abstractive",
+    "M18": "Abstractive",
+    "M19": "Abstractive",
+    "M20": "Abstractive",
+    "M21": "Abstractive",
+    "M22": "Abstractive",
+    "M23": "Abstractive"
+}
+
+converted = []
 # Cleaning function to ensure ASCII output and replace unicode punctuation
 def clean_to_ascii(text):
     replacements = {
@@ -47,20 +75,24 @@ def clean_to_ascii(text):
     text = re.sub(r'\s+', ' ', text).strip()
     return text
 
+
 with open(input_file, "r", encoding="utf-8", errors="replace") as f_in:
     for line in f_in:
         try:
             entry = json.loads(line)
-            if "text" in entry and "decoded" in entry and "references" in entry and entry["references"]:
+            if "text" in entry and "decoded" in entry and "references" in entry and entry["references"] and "model_id" in entry:
                 doc = clean_to_ascii(entry["text"])
                 reference = clean_to_ascii(entry["references"][0])
                 model = clean_to_ascii(entry["decoded"])
                 expert_annotations = entry.get("expert_annotations", [])
+                summary_type = model_type_map.get(entry["model_id"], "Unknown")
                 out_obj = {
                     "Doc": doc,
                     "Reference": reference,
                     "model": model,
-                    "expert_annotations": expert_annotations
+                    "expert_annotations": expert_annotations,
+                    "model_id": entry["model_id"],
+                    "summary_type": summary_type
                 }
                 converted.append(out_obj)
         except json.JSONDecodeError:
@@ -69,4 +101,4 @@ with open(input_file, "r", encoding="utf-8", errors="replace") as f_in:
 with open(output_file, "w", encoding="utf-8") as f_out:
     json.dump(converted, f_out, indent=2)
 
-print(f"Converted {len(converted)} samples to Sem-nCG format with expert annotations.")
+print(f"Converted {len(converted)} samples to Sem-nCG format with expert annotations and summary_type field.")
