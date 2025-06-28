@@ -39,10 +39,10 @@ LLM_MODELS = [
     # ("Qwen/Qwen3-0.6B", "qwen3-0.6b"),
 
     # Classical models
-    # ('sentence-transformers/all-MiniLM-L6-v2', 'sbert-mini'),
+    ('sentence-transformers/all-MiniLM-L6-v2', 'sbert-mini'),
     # ('sentence-transformers/all-mpnet-base-v2', 'sbert-l'),
     # ('laserembeddings', 'laser'),
-    ('universal-sentence-encoder', 'use'),
+    # ('universal-sentence-encoder', 'use'),
     # ('roberta-base', 'roberta'),
     # ('princeton-nlp/sup-simcse-roberta-base', 'simcse'),
     # ('InferSent/encoder/infersent2.pkl', 'infersent'),
@@ -124,7 +124,7 @@ def compute_similarity(doc_sent, ref_sent, tokenizer, model):
     ref_sent_embeddings = mean_pooling(model_ref, encoded_ref['attention_mask'])
     return doc_per_sent_similarity(doc_sent_embeddings, ref_sent_embeddings)
 
-def read_sample_file(file="sample.json"):
+def read_sample_file(file="./data/processed_data.json"):
     """
     :rtype: sample.json -> [{"Doc": str, "Reference": str, "model": str},...], Doc->List[str], Reference->List[str], model->List[str]
     """
@@ -173,7 +173,7 @@ def compute_model_senId(doc, model):
     {'model': model,
      'modelSenID': modelSenId
     })
-  df.to_json("./output/model.json", orient='records') #orient="records"/"index"
+  df.to_json("./models/model.json", orient='records') #orient="records"/"index"
   return 
 
 
@@ -186,7 +186,7 @@ def compute_doc_ref_similarity():
 
     for model_path, model_name in LLM_MODELS:
         print(f"[INFO] Running model: {model_name} ({model_path})")
-        fn = f"./output/{model_name}_similarity.txt"
+        fn = f"./models/{model_name}_similarity.txt"
         tokenizer, model_obj = load_model(model_path)
         with open(fn, "w") as fw:
             for i in range(len(doc)):
@@ -203,7 +203,7 @@ def read_file(model_name):
     #read corresponding <model_name>_similarity.txt file#
     :rtype Dataframe: fileId, dictSim -> sim of doc sentences with reference
     """
-    dir = "./output/"
+    dir = "./models/"
     fn = dir+f"{model_name}_similarity.txt"
 
     dicSim = []
@@ -237,7 +237,7 @@ def compute_gt():
     """
     write output to file for each model
     """
-    dir = "./output/"
+    dir = "./models/"
     for _, model_name in LLM_MODELS:
         fn = dir+f"{model_name}_gain.txt"
         df = read_file(model_name)

@@ -3,8 +3,8 @@ import unicodedata
 import re
 
 # File paths
-input_file = "data_annotations_aligned.paired.jsonl"
-output_file = "prepared_data_v2.json"  # Output as a single JSON file
+input_file = "./data/raw_data.jsonl"
+output_file = "./data/processed_data.json"  # Output as a single JSON file
 
 converted = []
 

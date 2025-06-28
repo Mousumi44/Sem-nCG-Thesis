@@ -11,7 +11,7 @@ def read_gt_gain(model_name):
     """
     :rtype: List[List[tuple]]
     """
-    dir = "./output/"
+    dir = "./models/"
     fn = dir+f"{model_name}_gain.txt"
     gt_gain = []
     with open(fn, "r") as file:
@@ -19,7 +19,7 @@ def read_gt_gain(model_name):
             gt_gain.append(ast.literal_eval(line))
     return gt_gain
 
-def read_model_file(file="./output/model.json"):
+def read_model_file(file="./models/model.json"):
     """
     :rtype: List[List[int]]
     """
@@ -77,9 +77,9 @@ def eval_ncg():
         # 'qwen3-0.6b',
         
         # Classical models
-        # 'sbert-mini',
+        'sbert-mini',
         # 'laser',
-        'use',
+        # 'use',
         # 'roberta',
         # 'sbert-l',
         # 'simcse',
@@ -113,5 +113,5 @@ def eval_ncg():
 
 
 if __name__=='__main__':
-    with jsonlines.open("score.jsonl", "a") as writer:   # for writing
+    with jsonlines.open("./output/score.jsonl", "a") as writer:   # for writing
         writer.write(eval_ncg())
