@@ -5,7 +5,6 @@ from scipy.stats import kendalltau
 import pandas as pd
 
 
-# 1. Extract average expert annotation scores for each sample from sample_v2.json
 sample_file = "./data/processed_data.json"
 human_scores = {"coherence": [], "consistency": [], "fluency": [], "relevance": []}
 
@@ -24,7 +23,6 @@ with open(sample_file, "r", encoding="utf-8") as f:
                 human_scores[key].append(np.nan)
 
 
-# 2. Load Sem-nCG scores from score.jsonl
 score_file = "./output/score.jsonl"
 model_scores = {}
 with open(score_file, "r", encoding="utf-8") as f:
