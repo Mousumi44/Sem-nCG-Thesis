@@ -2,6 +2,8 @@ import json
 import jsonlines
 import numpy as np
 from scipy.stats import kendalltau
+import pandas as pd
+
 
 # 1. Extract average expert annotation scores for each sample from sample_v2.json
 sample_file = "./data/processed_data.json"
@@ -41,14 +43,14 @@ for model, scores in model_scores.items():
         valid = [(h, s) for h, s in zip(human_scores[key], scores) if not np.isnan(h)]
         if not valid or len(valid) < 2:
             print(f"  {key}: Not enough data")
-            results.append({"model": model, "annotation": key, "tau": None, "p": None, "note": "Not enough data"})
+            results.append({"model": model, "annotation": key, "tau": None, "p": None})
             continue
         h_vals, s_vals = zip(*valid)
         tau, p = kendalltau(h_vals, s_vals)
         print(f"  {key}: tau={tau:.3f}, p={p:.3g}")
-        results.append({"model": model, "annotation": key, "tau": tau, "p": p, "note": ""})
+        results.append({"model": model, "annotation": key, "tau": tau, "p": p})
 
 # Save results to CSV
-import pandas as pd
 df = pd.DataFrame(results)
 df.to_csv("./output/kendall_results.csv", index=False)
+print("Kendall's tau results saved to ./output/kendall_results.csv.")
