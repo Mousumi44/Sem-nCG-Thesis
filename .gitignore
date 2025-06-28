@@ -2,15 +2,10 @@ output/
 venv/
 .vscode/
 .pytest_cache/
-Algorithm_working.txt
-notes.txt
 __pycache__/
-# sample.json
-sample_1.jsonl
 *.log
 *.tmp
 *.bak
 *.swp
 *.DS_Store
-model.json
 .env
