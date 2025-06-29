@@ -12,7 +12,6 @@ def read_gt_gain(model_name):
     :rtype: List[List[tuple]]
     """
     dir = "./models/"
-    # Accepts model_name as 'qwen3-0.6b' and summary_type as optional
     # If summary_type is provided, use the category-aware file
     def _read(model_name, summary_type=None):
         if summary_type:
@@ -124,7 +123,7 @@ def eval_ncg(summary_type=None):
     return results
 
 if __name__=='__main__':
-    # Choose which categories to run by commenting/uncommenting below
+    # Choose which categories to run
     categories = ["Extractive"]
     # categories = ["Abstractive"]
     # categories = ["Extractive","Abstractive"]
