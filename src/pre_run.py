@@ -15,6 +15,7 @@ from copy import deepcopy
 from dotenv import load_dotenv
 import tensorflow_hub as hub
 import tensorflow as tf
+import difflib
 
 
 # import nltk
@@ -32,7 +33,7 @@ LLM_MODELS = [
     # LLMs (uncomment as needed)
     # ('meta-llama/Llama-3.2-1B', 'llama3.2'),
     # ("meta-llama/Llama-2-13b-hf",'llama2'),
-    ('google/gemma-3-1b-it', 'gemma-3-1b-it'),
+    # ('google/gemma-3-1b-it', 'gemma-3-1b-it'),
     # ('mistralai/Mistral-7B-v0.1', 'mistral'),
     # ("apple/OpenELM-270M", "openelm"),
     # ("allenai/OLMo-2-0425-1B", "olmo-2-1b"),
@@ -43,7 +44,7 @@ LLM_MODELS = [
     # ('sentence-transformers/all-mpnet-base-v2', 'sbert-l'),
     # ('laserembeddings', 'laser'),
     # ('universal-sentence-encoder', 'use'),
-    # ('roberta-base', 'roberta'),
+    ('roberta-base', 'roberta'),
     # ('princeton-nlp/sup-simcse-roberta-base', 'simcse'),
     # ('InferSent/encoder/infersent2.pkl', 'infersent'),
 ]
@@ -135,29 +136,77 @@ def read_sample_file(file="./data/processed_data.json", summary_type=None):
     df = pd.DataFrame.from_dict(data)
     return df["Doc"], df["Reference"], df["model"]
 
-def compute_senID(doc_sent, model_summary_sent): # might need to change to compute semantic similarities (for abstraction)
+
+# Improved version for extractive summaries: lower, remove punctuation, collapse whitespace, strip, and match
+def compute_senID(doc_sent, model_summary_sent):
+    import string
     doc_sents = deepcopy(doc_sent)
     model_sum_SI = []
-
     seen_doc_sent_idxs = []
+    def clean(s):
+        s = s.lower()
+        s = s.translate(str.maketrans('', '', string.punctuation))
+        s = re.sub(r"\s+", " ", s)
+        return s.strip()
+    cleaned_doc_sents = [clean(s) for s in doc_sents]
     for search in model_summary_sent:
-        search = search.lower()
-        search = re.sub(r"[^a-zA-Z0-9]", "", search)
-        for doc_idx, s in enumerate(doc_sents):
-            s = s.lower()
-            s = re.sub(r"[^a-zA-Z0-9]", "", s)
-            if search in s:
-                if doc_idx not in seen_doc_sent_idxs:
+        search_clean = clean(search)
+        for doc_idx, s in enumerate(cleaned_doc_sents):
+            if search_clean == s and doc_idx not in seen_doc_sent_idxs:
+                model_sum_SI.append(doc_idx)
+                seen_doc_sent_idxs.append(doc_idx)
+                break
+        else:
+            # fallback: substring match
+            for doc_idx, s in enumerate(cleaned_doc_sents):
+                if search_clean in s and doc_idx not in seen_doc_sent_idxs:
                     model_sum_SI.append(doc_idx)
                     seen_doc_sent_idxs.append(doc_idx)
                     break
+    if len(model_sum_SI) < len(model_summary_sent):
+        print(f"[SKIP] matched {len(model_sum_SI)} of {len(model_summary_sent)}")
+        return None
+    return model_sum_SI
 
-    # assert len(model_sum_SI) == len(model_summary_sent)
-    
-    if len(model_sum_SI) < len(model_summary_sent):  # changed due to abstractive summaries
+
+
+def normalize_text(text):
+    # Lowercase, remove punctuation, extra whitespace, and normalize unicode
+    import unicodedata
+    text = text.lower()
+    text = ''.join(c for c in unicodedata.normalize('NFKD', text) if not unicodedata.combining(c))
+    # Remove all punctuation and symbols (no \p escapes, use string.punctuation)
+    import string
+    text = text.translate(str.maketrans('', '', string.punctuation))
+    text = re.sub(r"[^a-z0-9 ]", "", text)      # Remove non-alphanum except space
+    text = re.sub(r"\s+", " ", text).strip()    # Collapse whitespace
+    return text
+
+def compute_senID(doc_sent, model_summary_sent):
+    doc_sents = deepcopy(doc_sent)
+    model_sum_SI = []
+    seen_doc_sent_idxs = []
+    norm_doc_sents = [normalize_text(s) for s in doc_sents]
+    for search in model_summary_sent:
+        search_proc = normalize_text(search)
+        found = False
+        for doc_idx, s_proc in enumerate(norm_doc_sents):
+            if search_proc == s_proc and doc_idx not in seen_doc_sent_idxs:
+                model_sum_SI.append(doc_idx)
+                seen_doc_sent_idxs.append(doc_idx)
+                found = True
+                break
+        if not found:
+            # Try substring match as fallback
+            for doc_idx, s_proc in enumerate(norm_doc_sents):
+                if search_proc in s_proc and doc_idx not in seen_doc_sent_idxs:
+                    model_sum_SI.append(doc_idx)
+                    seen_doc_sent_idxs.append(doc_idx)
+                    found = True
+                    break
+    if len(model_sum_SI) < len(model_summary_sent):
         print(f"[SKIP] Only matched {len(model_sum_SI)} of {len(model_summary_sent)}")
         return None
-
     return model_sum_SI
 
 
@@ -193,8 +242,8 @@ def compute_doc_ref_similarity():
 
     # Set summary_types here:
 
-    # summary_types = ["Extractive"]
-    summary_types = ["Abstractive"]
+    summary_types = ["Extractive"]
+    # summary_types = ["Abstractive"]
     # summary_types = ["Extractive", "Abstractive"]  #both
 
     for summary_type in summary_types:
@@ -263,8 +312,8 @@ def compute_gt():
     """
     dir = "./models/"
     # Set summary_types here: comment/uncomment as needed
-    # summary_types = ["Extractive"]
-    summary_types = ["Abstractive"]
+    summary_types = ["Extractive"]
+    # summary_types = ["Abstractive"]
     # summary_types = ["Abstractive", "Extractive"]  # both
 
     for summary_type in summary_types:

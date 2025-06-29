@@ -80,7 +80,7 @@ def eval_ncg(summary_type=None):
         # LLMs
         # 'llama3.2',
         # 'llama2',
-        'gemma-3-1b-it',
+        # 'gemma-3-1b-it',
         # 'mistral',
         # 'openelm',
         # 'olmo-2-1b',
@@ -89,7 +89,7 @@ def eval_ncg(summary_type=None):
         # 'sbert-mini',
         # 'laser',
         # 'use',
-        # 'roberta',
+        'roberta',
         # 'sbert-l',
         # 'simcse',
         # 'infersent'
@@ -125,8 +125,8 @@ def eval_ncg(summary_type=None):
 
 if __name__=='__main__':
     # Choose which categories to run by commenting/uncommenting below
-    # categories = ["Extractive"]
-    categories = ["Abstractive"]
+    categories = ["Extractive"]
+    # categories = ["Abstractive"]
     # categories = ["Extractive","Abstractive"]
     with jsonlines.open("./output/score.jsonl", "a") as writer:
         for cat in categories:
