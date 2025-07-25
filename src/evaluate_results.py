@@ -9,7 +9,7 @@ df = pd.read_csv('output/score.csv')
 selected_models = [
     'Sem-nCG@3_distil',
     'Sem-nCG@3_simcse',
-    'Sem-nCG@3_roberta_extractive',
+    'Sem-nCG@3_roberta',
     'Sem-nCG@3_openelm',
     'Sem-nCG@3_llama3.2'
 ]
@@ -67,7 +67,7 @@ kendall_df = pd.read_csv('output/kendall_results.csv')
 selected_models = [
     'Sem-nCG@3_distil',
     'Sem-nCG@3_simcse',
-    'Sem-nCG@3_roberta_extractive',
+    'Sem-nCG@3_roberta',
     'Sem-nCG@3_openelm',
     'Sem-nCG@3_llama3.2'
 ]
@@ -85,8 +85,8 @@ plt.close()
 
 
 plt.figure(figsize=(14, 6))
-sns.barplot(data=kendall_df_selected, x="model", y="tau", hue="annotation")
-plt.xticks(rotation=90)
+ax = sns.barplot(data=kendall_df_selected, x="model", y="tau", hue="annotation")
+# plt.xticks(rotation=90)
 plt.title("Kendall's Tau by Model and Annotation")
 plt.axhline(0, color='gray', linestyle='--')
 plt.tight_layout()
@@ -109,8 +109,9 @@ plt.savefig('output/kendall_scatter_sig_plot.png')
 plt.close()
 
 
+palette = sns.color_palette("Set2", len(kendall_df_selected["model"].unique()))
 g = sns.FacetGrid(kendall_df_selected, col="annotation", col_wrap=2, height=4, sharey=True)
-g.map_dataframe(sns.barplot, x="tau", y="model", hue="model", order=kendall_df_selected["model"].unique())
+g.map_dataframe(sns.barplot, x="tau", y="model", hue="model", order=kendall_df_selected["model"].unique(), palette=palette)
 g.set_titles("{col_name}")
 g.fig.subplots_adjust(top=0.9)
 g.fig.suptitle("Kendall’s Tau per Annotation Type", fontsize=16)
