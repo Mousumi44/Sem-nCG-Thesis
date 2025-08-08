@@ -1,12 +1,15 @@
 
 
-# Sem-nCG Evaluation for Abstractive Summarization
+# Document-aware Evaluation of Abstractive Summaries
 
 This project adapts the **Sem-nCG** (Semantic Normalized Cumulative Gain) metric for evaluating **abstractive summaries**, specifically using the **CNN/DailyMail** dataset.
 
-## Meeting notes
+## Links
 
-Link: https://docs.google.com/document/d/14Vnd6cudsuq0BEn5OQaOyqqRJqkU4Ov87VTqEmlWU1w/edit?usp=sharing
+* Meeting Logs [link](https://docs.google.com/document/d/14Vnd6cudsuq0BEn5OQaOyqqRJqkU4Ov87VTqEmlWU1w/edit?usp=sharing)
+* Weekly Work Progress Presentation [link]()
+* Experiment results [link](https://docs.google.com/spreadsheets/d/1T3jnNB1oXLwrRBN1QwlMBgnunM1lM4ZmR3MTr6ZTCtM/edit?gid=0#gid=0)
+* Overleaf File [ACL](https://www.overleaf.com/project/685eb4ab7e0aacd38c268ed1) [Thesis](https://www.overleaf.com/project/6881dc3db09af76610e8576d)
 
 ## Setup
 
@@ -19,7 +22,12 @@ Link: https://docs.google.com/document/d/14Vnd6cudsuq0BEn5OQaOyqqRJqkU4Ov87VTqEm
    ```bash
    pip install -r requirements.txt
    ```
+## Useful References
 
+- [ACL paper](https://aclanthology.org/2022.findings-acl.122)
+- [Konvens paper](https://aclanthology.org/2024.konvens-main.21/)
+- [SummEval Dataset](https://github.com/Yale-LILY/SummEval) [SummEval Paper](https://aclanthology.org/2021.tacl-1.24.pdf)
+  
 ## Dataset
 
 - **Dataset:** CNN/DailyMail (abstractive)
@@ -30,10 +38,7 @@ Link: https://docs.google.com/document/d/14Vnd6cudsuq0BEn5OQaOyqqRJqkU4Ov87VTqEm
 - **Sem-nCG@k** = Normalized Cumulative Gain for top-k model sentences
 
 
-## Credits
 
-- Sem-nCG: Based on Findings of ACL 2022 paper: https://aclanthology.org/2022.findings-acl.122
-- Data annotations: SummEval https://github.com/Yale-LILY/SummEval
 
 ## Contact
 
