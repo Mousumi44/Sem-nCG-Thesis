@@ -7,7 +7,7 @@ This project adapts the **Sem-nCG** (Semantic Normalized Cumulative Gain) metric
 ## Links
 
 * Meeting Logs [link](https://docs.google.com/document/d/14Vnd6cudsuq0BEn5OQaOyqqRJqkU4Ov87VTqEmlWU1w/edit?usp=sharing)
-* Weekly Work Progress Presentation [link]()
+* Weekly Work Progress Presentation [link](https://docs.google.com/presentation/d/1VlFHwL3vgKU85JBegCajIccoRDZgGOrmT_HFhhH1Ewk/edit?usp=sharing )
 * Experiment results [link](https://docs.google.com/spreadsheets/d/1T3jnNB1oXLwrRBN1QwlMBgnunM1lM4ZmR3MTr6ZTCtM/edit?gid=0#gid=0)
 * Overleaf File [ACL](https://www.overleaf.com/project/685eb4ab7e0aacd38c268ed1) [Thesis](https://www.overleaf.com/project/6881dc3db09af76610e8576d)
 
