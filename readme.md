@@ -38,13 +38,21 @@ HF_TOKEN=your_huggingface_token_here
 
 ## 4. Run the Application
 
-The main scripts are:
+The main script is:
 
 ```bash
-python src/pre_run.py
-python src/compute_score.py
-```
+python src/main.py <MODEL_NAME>
 
+```
+Available models: llama3.2, gemma-3-1b-it, mistral, openelm, olmo-2-1b, qwen3-0.6b, falcon-7b, yulan-mini, sbert-mini, sbert-l, laser, use, roberta, simcse, infersent
+
+## 6. Save Results
+
+To save scores and correlation results in a csv file, run:
+
+```bash
+python src/save_results.py
+```
 
 
 ## 5. Generate Visualizations

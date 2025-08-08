@@ -17,6 +17,9 @@ import tensorflow_hub as hub
 import tensorflow as tf
 import difflib
 
+import jsonlines
+import ast
+
 
 # import nltk
 # nltk.download('punkt_tab')
@@ -27,38 +30,37 @@ token = os.getenv("HF_TOKEN")
 from huggingface_hub import login
 login(token=token)
 
-# import os
-# os.environ["CUDA_VISIBLE_DEVICES"] = "1"
-# import torch
 
 # LLM Models and Classical Models to be used for computing sentence embeddings
 LLM_MODELS = [
 
     # LLMs (uncomment as needed)
     
-    # ('meta-llama/Llama-3.2-1B', 'llama3.2'),
+    ('meta-llama/Llama-3.2-1B', 'llama3.2'),
     # ("meta-llama/Llama-2-13b-hf",'llama2'),
-    # ('google/gemma-3-1b-it', 'gemma-3-1b-it'),
-    # ('mistralai/Mistral-7B-v0.1', 'mistral'),
-    # ("apple/OpenELM-270M", "openelm"),
-    # ("allenai/OLMo-2-0425-1B", "olmo-2-1b"),
-    # ("Qwen/Qwen3-0.6B", "qwen3-0.6b"),
+    ('google/gemma-3-1b-it', 'gemma-3-1b-it'),
+    ('mistralai/Mistral-7B-v0.1', 'mistral'),
+    ("apple/OpenELM-270M", "openelm"),
+    ("allenai/OLMo-2-0425-1B", "olmo-2-1b"),
+    ("Qwen/Qwen3-0.6B", "qwen3-0.6b"),
     # ('AtlaAI/Selene-1-Mini-Llama-3.1-8B', 'selene-llama3.1-8b'),
-    # ('tiiuae/falcon-7B', 'falcon-7b'),
+    ('tiiuae/falcon-7B', 'falcon-7b'),
     # ('microsoft/phi-4', 'phi-4'),
     # ('microsoft/Phi-3-mini-instruct', 'phi-3-mini-instruct'),
-    ('deepseek-ai/DeepSeek-V2.5', 'deepseek-v2.5'),
-    # ('yulan-team/YuLan-Mini', 'yulan-mini'),
+    # ('deepseek-ai/DeepSeek-V2.5', 'deepseek-v2.5'),
+    ('yulan-team/YuLan-Mini', 'yulan-mini'),
 
     # Classical models
-    # ('sentence-transformers/all-MiniLM-L6-v2', 'sbert-mini'),
-    # ('sentence-transformers/all-mpnet-base-v2', 'sbert-l'),
-    # ('laserembeddings', 'laser'),
-    # ('universal-sentence-encoder', 'use'),
-    # ('roberta-base', 'roberta'),
-    # ('princeton-nlp/sup-simcse-roberta-base', 'simcse'),
-    # ('InferSent/encoder/infersent2.pkl', 'infersent'),
+    ('sentence-transformers/all-MiniLM-L6-v2', 'sbert-mini'),
+    ('sentence-transformers/all-mpnet-base-v2', 'sbert-l'),
+    ('laserembeddings', 'laser'),
+    ('universal-sentence-encoder', 'use'),
+    ('roberta-base', 'roberta'),
+    ('princeton-nlp/sup-simcse-roberta-base', 'simcse'),
+    ('InferSent/encoder/infersent2.pkl', 'infersent'),
 ]
+
+SELECTED_MODEL = None
 
 def load_model(model_path):    
     if model_path == "universal-sentence-encoder":
@@ -171,9 +173,9 @@ def compute_senID(doc_sent, model_summary_sent):
         #             model_sum_SI.append(doc_idx)
         #             seen_doc_sent_idxs.append(doc_idx)
         #             break
-    if len(model_sum_SI) < len(model_summary_sent):
-        print(f"[SKIP] matched {len(model_sum_SI)} of {len(model_summary_sent)}")
-        return None
+    # if len(model_sum_SI) < len(model_summary_sent):
+    #     print(f"[SKIP] matched {len(model_sum_SI)} of {len(model_summary_sent)}")
+    #     return None
     return model_sum_SI
 
 
@@ -209,7 +211,7 @@ def compute_doc_ref_similarity():
 
     # Set summary_types here:
 
-    summary_types = ["Extractive"]
+    summary_types = ["Abstractive"]
     # summary_types = ["Abstractive"]
     # summary_types = ["Extractive", "Abstractive"]  #both
 
@@ -218,7 +220,7 @@ def compute_doc_ref_similarity():
         doc, ref, model = read_sample_file(summary_type=summary_type)
         compute_model_senId(doc, model, summary_type=summary_type)
 
-        for model_path, model_name in LLM_MODELS:
+        for model_path, model_name in SELECTED_MODEL:
             print(f"[INFO] Running model: {model_name} ({model_path}) [{summary_type}]")
             fn = f"./models/{model_name}_similarity_{summary_type.lower()}.txt"
             tokenizer, model_obj = load_model(model_path)
@@ -279,12 +281,12 @@ def compute_gt():
     """
     dir = "./models/"
     # Set summary_types here:
-    summary_types = ["Extractive"]
+    summary_types = ["Abstractive"]
     # summary_types = ["Abstractive"]
     # summary_types = ["Abstractive", "Extractive"]  # both
 
     for summary_type in summary_types:
-        for _, model_name in LLM_MODELS:
+        for _, model_name in SELECTED_MODEL:
             fn = dir+f"{model_name}_gain_{summary_type.lower()}.txt"
             try:
                 df = read_file(model_name, summary_type=summary_type)
@@ -300,8 +302,112 @@ def compute_gt():
                     print(f'[{model_name}][{summary_type}] Current Sample {i}')
 
 
+# computing scores from here
+
+k = 3
+
+def read_gt_gain(model_name):
+    dir = "./models/"
+    def _read(model_name, summary_type=None):
+        if summary_type:
+            fn = dir+f"{model_name}_gain_{summary_type.lower()}.txt"
+        else:
+            fn = dir+f"{model_name}_gain.txt"
+        gt_gain = []
+        with open(fn, "r") as file:
+            for line in file:
+                gt_gain.append(ast.literal_eval(line))
+        return gt_gain
+    return _read
+
+def read_model_file(file="./models/model.json", summary_type=None):
+    if summary_type:
+        file = f"./models/model_{summary_type.lower()}.json"
+    data = json.load(open(file, "r"))
+    df = pd.DataFrame.from_dict(data)
+    return df["modelSenID"]
+
+def scoreNCG(model_relevance, GT_relevance):
+    cg = sum(model_relevance)
+    icg = sum(GT_relevance)
+    ncg = cg/icg
+    return ncg
+
+def computeNCG(gt, model):
+    gt_dic = {int(k): v for k, v in dict(gt).items()}
+    gt_rel = [v for _, v in gt[:k]]
+    model_rel = []
+    for j in range(k):
+        model_rel.append(gt_dic[model[j]])
+    return scoreNCG(model_rel, gt_rel)
+
+# Evaluate for all LLM_MODELS
+
+def eval_ncg(summary_type=None):
+    results = {}
+    for model_tuple in SELECTED_MODEL:
+        if isinstance(model_tuple, tuple):
+            model_name = model_tuple[1]
+        else:
+            model_name = model_tuple
+        print(f"[INFO] Evaluating model: {model_tuple} | Category: {summary_type if summary_type else 'All'}")
+        try:
+            gt_gain = read_gt_gain(model_name)(model_name, summary_type=summary_type)
+        except FileNotFoundError:
+            print(f"[SKIP] Model {model_tuple}: gain file not found for {summary_type}")
+            continue
+        try:
+            model_senId = read_model_file(summary_type=summary_type)
+        except Exception as e:
+            print(f"[SKIP] Model {model_tuple}: model file error: {e}")
+            continue
+        res = []
+        for i in range(len(gt_gain)):
+            if model_senId[i] is None:
+                # print(f"[SKIP] Sample {i}: model_senId is None")
+                continue
+            if len(model_senId[i]) < k:
+                # print(f"[SKIP] Sample {i}: model_senId has less than k elements")
+                continue
+            score = computeNCG(gt_gain[i], model_senId[i])
+            if score is not None:
+                res.append(score)
+        label = f"Sem-nCG@3_{model_name}_{summary_type.lower() if summary_type else 'all'}"
+        results[label] = res
+    return results
 
 if __name__=="__main__":
-    
+
+    if len(sys.argv) != 2:
+        print("Usage: python main.py <MODEL_NAME>")
+        print("Available models:", ', '.join([m[1] if isinstance(m, tuple) else m for m in LLM_MODELS]))
+        sys.exit(1)
+
+    model_name = sys.argv[1]
+
+    # Find the tuple in LLM_MODELS where the second element matches model_name
+    selected = None
+    for m in LLM_MODELS:
+        if isinstance(m, tuple) and m[1] == model_name:
+            selected = m
+            break
+        elif m == model_name:
+            selected = m
+            break
+
+    if not selected:
+        print(f"Model '{model_name}' not found in LLM_MODELS.")
+        print("Available models:", ', '.join([m[1] if isinstance(m, tuple) else m for m in LLM_MODELS]))
+        sys.exit(1)
+
+
+    SELECTED_MODEL = [selected]
+
+    print("SELECTED MODEL:", selected)
+
     compute_doc_ref_similarity()
     compute_gt()
+    categories = ["Abstractive"]
+    with jsonlines.open("./output/score.jsonl", "a") as writer:
+        for cat in categories:
+            writer.write(eval_ncg(summary_type=cat))
