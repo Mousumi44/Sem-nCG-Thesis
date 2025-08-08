@@ -10,3 +10,4 @@ tensorflow
 tensorflow-hub
 huggingface-hub
 openai
+accelerate

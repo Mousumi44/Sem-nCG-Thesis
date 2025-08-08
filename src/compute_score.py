@@ -91,7 +91,13 @@ def eval_ncg(summary_type=None):
         'roberta',
         # 'sbert-l',
         # 'simcse',
-        # 'infersent'
+        # 'infersent,'
+        # "selene-llama3.1-8b",
+        # 'falcon-7b',
+        # "phi-4",
+        # "deepseek-v3",
+        # "yulan-mini",
+        # "phi-3-mini-instruct",
     ]
     for model_name in LLM_MODELS:
         print(f"[INFO] Evaluating model: {model_name} | Category: {summary_type if summary_type else 'All'}")

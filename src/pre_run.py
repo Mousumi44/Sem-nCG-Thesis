@@ -27,10 +27,15 @@ token = os.getenv("HF_TOKEN")
 from huggingface_hub import login
 login(token=token)
 
+# import os
+# os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+# import torch
+
 # LLM Models and Classical Models to be used for computing sentence embeddings
 LLM_MODELS = [
 
     # LLMs (uncomment as needed)
+    
     # ('meta-llama/Llama-3.2-1B', 'llama3.2'),
     # ("meta-llama/Llama-2-13b-hf",'llama2'),
     # ('google/gemma-3-1b-it', 'gemma-3-1b-it'),
@@ -38,13 +43,19 @@ LLM_MODELS = [
     # ("apple/OpenELM-270M", "openelm"),
     # ("allenai/OLMo-2-0425-1B", "olmo-2-1b"),
     # ("Qwen/Qwen3-0.6B", "qwen3-0.6b"),
+    # ('AtlaAI/Selene-1-Mini-Llama-3.1-8B', 'selene-llama3.1-8b'),
+    # ('tiiuae/falcon-7B', 'falcon-7b'),
+    # ('microsoft/phi-4', 'phi-4'),
+    # ('microsoft/Phi-3-mini-instruct', 'phi-3-mini-instruct'),
+    ('deepseek-ai/DeepSeek-V2.5', 'deepseek-v2.5'),
+    # ('yulan-team/YuLan-Mini', 'yulan-mini'),
 
     # Classical models
     # ('sentence-transformers/all-MiniLM-L6-v2', 'sbert-mini'),
     # ('sentence-transformers/all-mpnet-base-v2', 'sbert-l'),
     # ('laserembeddings', 'laser'),
     # ('universal-sentence-encoder', 'use'),
-    ('roberta-base', 'roberta'),
+    # ('roberta-base', 'roberta'),
     # ('princeton-nlp/sup-simcse-roberta-base', 'simcse'),
     # ('InferSent/encoder/infersent2.pkl', 'infersent'),
 ]
@@ -67,11 +78,6 @@ def load_model(model_path):
             else:
                 tokenizer.add_special_tokens({'pad_token': '[PAD]'})
         return tokenizer, model
-    # elif "laser" in model_path.lower():
-    #     # For LASER, we use LaserEncoderPipeline which handles both tokenization and encoding
-    #     encoder = LaserEncoderPipeline()
-    #     # Return encoder as both tokenizer and model since it handles both functions
-    #     return encoder, encoder
     else:
         tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
         if tokenizer.pad_token is None:
@@ -79,8 +85,9 @@ def load_model(model_path):
                 tokenizer.pad_token = tokenizer.eos_token
             else:
                 tokenizer.add_special_tokens({'pad_token': '[PAD]'})
-        device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        model = AutoModel.from_pretrained(model_path, trust_remote_code=True).to(device)
+        # device = torch.device('cuda:1' if torch.cuda.is_available() else 'cpu')
+        # model = AutoModel.from_pretrained(model_path, trust_remote_code=True).to(device)
+        model = AutoModel.from_pretrained(model_path, trust_remote_code=True, device_map="auto")
         return tokenizer, model
 
 #Mean Pooling - Take attention mask into account for correct averaging

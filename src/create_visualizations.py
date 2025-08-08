@@ -16,26 +16,6 @@ selected_models = [
 
 df_selected = df[selected_models]
 
-# data = df_selected.mean().reset_index()
-# data.columns = ['model', 'score']
-# categories = data['model'].tolist()
-# values = data['score'].tolist()
-# values += values[:1]  # close the circle
-
-# # Radar setup
-# N = len(categories)
-# angles = [n / float(N) * 2 * pi for n in range(N)]
-# angles += angles[:1]
-
-# plt.figure(figsize=(8, 6))
-# ax = plt.subplot(111, polar=True)
-# plt.xticks(angles[:-1], categories, color='grey', size=10)
-# ax.plot(angles, values, linewidth=2, linestyle='solid')
-# ax.fill(angles, values, alpha=0.25)
-# plt.title("Average Sem-nCG@3 Scores Across Models")
-# plt.savefig('output/scores_spider_plot.png')
-# plt.close()
-
 
 model_means = df_selected.mean().sort_values(ascending=False)
 plt.figure(figsize=(12, 6))
