@@ -38,13 +38,21 @@ HF_TOKEN=your_huggingface_token_here
 
 ## 4. Run the Application
 
-The main script is:
+### Using python
 
 ```bash
 python src/main.py <MODEL_NAME>
-
 ```
-Available models: llama3.2, gemma-3-1b-it, mistral, openelm, olmo-2-1b, qwen3-0.6b, falcon-7b, yulan-mini, sbert-mini, sbert-l, laser, use, roberta, simcse, infersent
+
+### Using shell script
+
+```bash
+./run_pipeline.sh sbert-mini
+```
+
+Note: conda has to be activated in both cases
+
+Available models: llama3.2, gemma-3-1b-it, mistral, openelm, olmo-2-1b, qwen3-0.6b, falcon-7b, yulan-mini, sbert-mini, sbert-l, use, roberta, simcse
 
 ## 6. Save Results
 

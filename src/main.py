@@ -53,11 +53,11 @@ LLM_MODELS = [
     # Classical models
     ('sentence-transformers/all-MiniLM-L6-v2', 'sbert-mini'),
     ('sentence-transformers/all-mpnet-base-v2', 'sbert-l'),
-    ('laserembeddings', 'laser'),
+    # ('laserembeddings', 'laser'),
     ('universal-sentence-encoder', 'use'),
     ('roberta-base', 'roberta'),
     ('princeton-nlp/sup-simcse-roberta-base', 'simcse'),
-    ('InferSent/encoder/infersent2.pkl', 'infersent'),
+    # ('InferSent/encoder/infersent2.pkl', 'infersent'),
 ]
 
 SELECTED_MODEL = None
