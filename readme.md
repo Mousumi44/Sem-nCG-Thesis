@@ -47,7 +47,7 @@ python src/main.py <MODEL_NAME>
 ### Using shell script
 
 ```bash
-./run_pipeline.sh sbert-mini
+./run_pipeline.sh <MODEL_NAME>
 ```
 
 Note: conda has to be activated in both cases
