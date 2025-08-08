@@ -11,22 +11,57 @@ This project adapts the **Sem-nCG** (Semantic Normalized Cumulative Gain) metric
 * Experiment results [link](https://docs.google.com/spreadsheets/d/1T3jnNB1oXLwrRBN1QwlMBgnunM1lM4ZmR3MTr6ZTCtM/edit?gid=0#gid=0)
 * Overleaf File [ACL](https://www.overleaf.com/project/685eb4ab7e0aacd38c268ed1) [Thesis](https://www.overleaf.com/project/6881dc3db09af76610e8576d)
 
-## Setup
+## Setup and Run
 
-1. Create a virtual environment (Windows):
-   ```powershell
-   python -m venv venv
-   venv\Scripts\activate
-   ```
-2. Install dependencies:
-   ```bash
-   pip install -r requirements.txt
-   ```
-## Useful References
+## 1. Create and Activate Conda Environment
 
-- [ACL paper](https://aclanthology.org/2022.findings-acl.122)
-- [Konvens paper](https://aclanthology.org/2024.konvens-main.21/)
-- [SummEval Dataset](https://github.com/Yale-LILY/SummEval) [SummEval Paper](https://aclanthology.org/2021.tacl-1.24.pdf)
+```bash
+conda create -n semncg python=3.11 -y
+conda activate semncg
+```
+
+## 2. Install Python Dependencies
+
+```bash
+pip install -r requirements.txt
+```
+
+## 3. Set Your Hugging Face Token
+
+You need a Hugging Face token to access some models. Get your token from https://huggingface.co/settings/tokens and set it in a `.env` file:
+
+Create a file named `.env` in the project root with this content:
+
+```
+HF_TOKEN=your_huggingface_token_here
+```
+
+## 4. Run the Application
+
+The main scripts are:
+
+```bash
+python src/pre_run.py
+python src/compute_score.py
+```
+
+
+
+## 5. Generate Visualizations
+
+After running the main pipeline, generate plots from the output data:
+
+```bash
+python src/create_visualizations.py
+```
+
+
+## 6. Output
+
+Results and plots will be saved in the `output/` and `models/` directories.
+
+---
+
   
 ## Dataset
 
@@ -36,7 +71,6 @@ This project adapts the **Sem-nCG** (Semantic Normalized Cumulative Gain) metric
 ## Evaluation Metric
 
 - **Sem-nCG@k** = Normalized Cumulative Gain for top-k model sentences
-
 
 
 
