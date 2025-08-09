@@ -19,7 +19,7 @@ import difflib
 
 import jsonlines
 import ast
-
+from rouge_score import rouge_scorer
 
 # import nltk
 # nltk.download('punkt_tab')
@@ -57,7 +57,12 @@ LLM_MODELS = [
     ('universal-sentence-encoder', 'use'),
     ('roberta-base', 'roberta'),
     ('princeton-nlp/sup-simcse-roberta-base', 'simcse'),
+    ('DILAB-HYU/SentiCSE', 'senticse'),
     # ('InferSent/encoder/infersent2.pkl', 'infersent'),
+
+
+    #baseline models
+    ('rougeL', 'rougeL'),
 ]
 
 SELECTED_MODEL = None
@@ -80,6 +85,8 @@ def load_model(model_path):
             else:
                 tokenizer.add_special_tokens({'pad_token': '[PAD]'})
         return tokenizer, model
+    elif model_path == "rougeL":
+        return "rougeL", "rougeL"
     else:
         tokenizer = AutoTokenizer.from_pretrained(model_path, trust_remote_code=True)
         if tokenizer.pad_token is None:
@@ -91,6 +98,19 @@ def load_model(model_path):
         # model = AutoModel.from_pretrained(model_path, trust_remote_code=True).to(device)
         model = AutoModel.from_pretrained(model_path, trust_remote_code=True, device_map="auto")
         return tokenizer, model
+
+
+#basline models of rouge
+def compute_rouge_similarity(doc_sent, ref_sent):
+    scorer = rouge_scorer.RougeScorer(['rougeL'], use_stemmer=True)
+    doc_sent_similarity = {}
+    for i, d in enumerate(doc_sent):
+        scores = []
+        for r in ref_sent:
+            score = scorer.score(d, r)['rougeL'].fmeasure
+            scores.append(score)
+        doc_sent_similarity[i] = sum(scores) / len(scores) if scores else 0.0
+    return doc_sent_similarity
 
 #Mean Pooling - Take attention mask into account for correct averaging
 def mean_pooling(model_output, attention_mask):
@@ -122,17 +142,19 @@ def compute_similarity(doc_sent, ref_sent, tokenizer, model):
         ref_sent_embeddings = model(tf.constant(ref_sent))
         return doc_per_sent_similarity(torch.from_numpy(doc_sent_embeddings.numpy()), 
                                     torch.from_numpy(ref_sent_embeddings.numpy()))
-
+    elif model == "rougeL":
+        return compute_rouge_similarity(doc_sent, ref_sent)
+    else:    
     # For other models that use PyTorch
-    device = next(model.parameters()).device
-    encoded_doc = tokenizer(doc_sent, padding=True, truncation=True, max_length=512, return_tensors='pt').to(device)
-    encoded_ref = tokenizer(ref_sent, padding=True, truncation=True, max_length=512, return_tensors='pt').to(device)
-    with torch.no_grad():
-        model_doc = model(**encoded_doc)
-        model_ref = model(**encoded_ref)
-    doc_sent_embeddings = mean_pooling(model_doc, encoded_doc['attention_mask'])
-    ref_sent_embeddings = mean_pooling(model_ref, encoded_ref['attention_mask'])
-    return doc_per_sent_similarity(doc_sent_embeddings, ref_sent_embeddings)
+        device = next(model.parameters()).device
+        encoded_doc = tokenizer(doc_sent, padding=True, truncation=True, max_length=512, return_tensors='pt').to(device)
+        encoded_ref = tokenizer(ref_sent, padding=True, truncation=True, max_length=512, return_tensors='pt').to(device)
+        with torch.no_grad():
+            model_doc = model(**encoded_doc)
+            model_ref = model(**encoded_ref)
+        doc_sent_embeddings = mean_pooling(model_doc, encoded_doc['attention_mask'])
+        ref_sent_embeddings = mean_pooling(model_ref, encoded_ref['attention_mask'])
+        return doc_per_sent_similarity(doc_sent_embeddings, ref_sent_embeddings)
 
 def read_sample_file(file="./data/processed_data.json", summary_type=None):
     """
@@ -211,9 +233,9 @@ def compute_doc_ref_similarity():
 
     # Set summary_types here:
 
-    summary_types = ["Abstractive"]
     # summary_types = ["Abstractive"]
-    # summary_types = ["Extractive", "Abstractive"]  #both
+    # summary_types = ["Abstractive"]
+    summary_types = ["Extractive", "Abstractive"]  #both
 
     for summary_type in summary_types:
         print(f"[INFO] Processing summary_type: {summary_type}")
@@ -281,9 +303,9 @@ def compute_gt():
     """
     dir = "./models/"
     # Set summary_types here:
-    summary_types = ["Abstractive"]
     # summary_types = ["Abstractive"]
-    # summary_types = ["Abstractive", "Extractive"]  # both
+    # summary_types = ["Abstractive"]
+    summary_types = ["Abstractive", "Extractive"]  # both
 
     for summary_type in summary_types:
         for _, model_name in SELECTED_MODEL:
@@ -407,7 +429,9 @@ if __name__=="__main__":
 
     compute_doc_ref_similarity()
     compute_gt()
-    categories = ["Abstractive"]
+    # categories = ["Abstractive"]
+    # categories = ["Extractive"]
+    categories = ["Abstractive", "Extractive"]
     with jsonlines.open("./output/score.jsonl", "a") as writer:
         for cat in categories:
             writer.write(eval_ncg(summary_type=cat))

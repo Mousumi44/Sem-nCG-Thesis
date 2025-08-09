@@ -7,11 +7,14 @@ from math import pi
 df = pd.read_csv('output/score.csv')
 
 selected_models = [
-    'Sem-nCG@3_distil',
+    'Sem-nCG@3_senticse_extractive',
+    # 'Sem-nCG@3_distill'
+    'Sem-nCG@3_use',
     'Sem-nCG@3_simcse',
-    'Sem-nCG@3_roberta',
+    # 'Sem-nCG@3_roberta',
     'Sem-nCG@3_openelm',
-    'Sem-nCG@3_llama3.2'
+    # 'Sem-nCG@3_llama3.2'
+    'rougeL_extractive'
 ]
 
 df_selected = df[selected_models]
@@ -44,13 +47,6 @@ plt.close()
 # Load Kendall's Tau results
 kendall_df = pd.read_csv('output/kendall_results.csv')
 
-selected_models = [
-    'Sem-nCG@3_distil',
-    'Sem-nCG@3_simcse',
-    'Sem-nCG@3_roberta',
-    'Sem-nCG@3_openelm',
-    'Sem-nCG@3_llama3.2'
-]
 
 kendall_df_selected = kendall_df[kendall_df['model'].isin(selected_models)]
 
