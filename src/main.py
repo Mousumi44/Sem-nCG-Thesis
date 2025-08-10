@@ -144,6 +144,19 @@ def compute_rouge_similarity(doc_sent, ref_sent):
         doc_sent_similarity[i] = sum(scores) / len(scores) if scores else 0.0
     return doc_sent_similarity
 
+
+#basline models of rouge
+def compute_rouge_similarity(doc_sent, ref_sent):
+    scorer = rouge_scorer.RougeScorer(['rougeL'], use_stemmer=True)
+    doc_sent_similarity = {}
+    for i, d in enumerate(doc_sent):
+        scores = []
+        for r in ref_sent:
+            score = scorer.score(d, r)['rougeL'].fmeasure
+            scores.append(score)
+        doc_sent_similarity[i] = sum(scores) / len(scores) if scores else 0.0
+    return doc_sent_similarity
+
 #Mean Pooling - Take attention mask into account for correct averaging
 def mean_pooling(model_output, attention_mask):
     token_embeddings = model_output[0] #First element of model_output contains all token embeddings
@@ -187,6 +200,15 @@ def compute_similarity(doc_sent, ref_sent, tokenizer, model):
     
     else:    
     # For other models that use PyTorch
+        device = next(model.parameters()).device
+        encoded_doc = tokenizer(doc_sent, padding=True, truncation=True, max_length=512, return_tensors='pt').to(device)
+        encoded_ref = tokenizer(ref_sent, padding=True, truncation=True, max_length=512, return_tensors='pt').to(device)
+        with torch.no_grad():
+            model_doc = model(**encoded_doc)
+            model_ref = model(**encoded_ref)
+        doc_sent_embeddings = mean_pooling(model_doc, encoded_doc['attention_mask'])
+        ref_sent_embeddings = mean_pooling(model_ref, encoded_ref['attention_mask'])
+        return doc_per_sent_similarity(doc_sent_embeddings, ref_sent_embeddings)
         device = next(model.parameters()).device
         encoded_doc = tokenizer(doc_sent, padding=True, truncation=True, max_length=512, return_tensors='pt').to(device)
         encoded_ref = tokenizer(ref_sent, padding=True, truncation=True, max_length=512, return_tensors='pt').to(device)
@@ -274,6 +296,8 @@ def compute_doc_ref_similarity():
 
     # summary_types = ["Abstractive"]
     # summary_types = ["Abstractive"]
+    # summary_types = ["Abstractive"]
+    summary_types = ["Extractive", "Abstractive"]  #both
     summary_types = ["Extractive", "Abstractive"]  #both
 
     for summary_type in summary_types:
@@ -344,6 +368,8 @@ def compute_gt():
     # Set summary_types here:
     # summary_types = ["Abstractive"]
     # summary_types = ["Abstractive"]
+    # summary_types = ["Abstractive"]
+    summary_types = ["Abstractive", "Extractive"]  # both
     summary_types = ["Abstractive", "Extractive"]  # both
 
     for summary_type in summary_types:
@@ -468,6 +494,9 @@ if __name__=="__main__":
 
     compute_doc_ref_similarity()
     compute_gt()
+    # categories = ["Abstractive"]
+    # categories = ["Extractive"]
+    categories = ["Abstractive", "Extractive"]
     # categories = ["Abstractive"]
     # categories = ["Extractive"]
     categories = ["Abstractive", "Extractive"]
