@@ -11,3 +11,8 @@ tensorflow-hub
 huggingface-hub
 openai
 accelerate
+matplotlib
+seaborn
+rouge
+peft
+json_repair
