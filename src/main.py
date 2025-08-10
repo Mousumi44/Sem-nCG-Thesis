@@ -106,14 +106,14 @@ def load_model(model_path):
             pooling_method="mean",
             suffix="custom",
             output_folder="./geneol/resultsTF/custom",
-            compositional=True,
+            compositional=False,
             task="custom",
             seed=42,
             normalized=True,
             penultimate_layer=-1,
             tsep=False,
             gen_only=False,
-            torch_dtype="bfloat16", 
+            torch_dtype="float16", 
         )
         init_proc = InitProcessGroupKwargs(timeout=1000)
         accelerator = Accelerator(kwargs_handlers=[init_proc])
