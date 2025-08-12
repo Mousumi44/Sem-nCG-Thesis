@@ -16,3 +16,4 @@ seaborn
 rouge
 peft
 json_repair
+sentencepiece

@@ -21,10 +21,11 @@ import jsonlines
 import ast
 from rouge_score import rouge_scorer
 
-# from geneol.geneol_embeddings import get_geneol_embeddings
-from geneol.geneol import GenEOL
+
 from accelerate import Accelerator, InitProcessGroupKwargs
 from argparse import Namespace
+import math
+
 
 # import nltk
 # nltk.download('punkt_tab')
@@ -43,13 +44,13 @@ LLM_MODELS = [
     
     ('meta-llama/Llama-3.2-1B', 'llama3.2'),
     # ("meta-llama/Llama-2-13b-hf",'llama2'),
-    ('google/gemma-3-1b-it', 'gemma-3-1b-it'),
+    ('google/gemma-3-1b-it', 'gemma'),
     ('mistralai/Mistral-7B-v0.1', 'mistral'),
     ("apple/OpenELM-270M", "openelm"),
-    ("allenai/OLMo-2-0425-1B", "olmo-2-1b"),
-    ("Qwen/Qwen3-0.6B", "qwen3-0.6b"),
-    # ('AtlaAI/Selene-1-Mini-Llama-3.1-8B', 'selene-llama3.1-8b'),
-    ('tiiuae/falcon-7B', 'falcon-7b'),
+    ("allenai/OLMo-2-0425-1B", "olmo"),
+    ("Qwen/Qwen3-0.6B", "qwen"),
+    ('AtlaAI/Selene-1-Mini-Llama-3.1-8B', 'selene-llama3.1-8b'),
+    ('tiiuae/falcon-7B', 'falcon'),
     # ('microsoft/phi-4', 'phi-4'),
     # ('microsoft/Phi-3-mini-instruct', 'phi-3-mini-instruct'),
     # ('deepseek-ai/DeepSeek-V2.5', 'deepseek-v2.5'),
@@ -95,12 +96,14 @@ def load_model(model_path):
     elif model_path == "rougeL":
         return "rougeL", "rougeL"
     elif model_path == "geneol":
+        from geneol.geneol_embeddings import get_geneol_embeddings
+        from geneol import GenEOL
         args = Namespace(
             model_name_or_path="mistralai/Mistral-7B-v0.1",
             gen_model_name_or_path="mistralai/Mistral-7B-Instruct-v0.1",
             method="s5",
             batch_size=32, 
-            num_gens=2,
+            num_gens=1,
             max_length=256,  # For input truncation
             max_new_tokens=256,  # For generation output
             pooling_method="mean",
@@ -145,17 +148,6 @@ def compute_rouge_similarity(doc_sent, ref_sent):
     return doc_sent_similarity
 
 
-#basline models of rouge
-def compute_rouge_similarity(doc_sent, ref_sent):
-    scorer = rouge_scorer.RougeScorer(['rougeL'], use_stemmer=True)
-    doc_sent_similarity = {}
-    for i, d in enumerate(doc_sent):
-        scores = []
-        for r in ref_sent:
-            score = scorer.score(d, r)['rougeL'].fmeasure
-            scores.append(score)
-        doc_sent_similarity[i] = sum(scores) / len(scores) if scores else 0.0
-    return doc_sent_similarity
 
 #Mean Pooling - Take attention mask into account for correct averaging
 def mean_pooling(model_output, attention_mask):
@@ -164,20 +156,27 @@ def mean_pooling(model_output, attention_mask):
     return torch.sum(token_embeddings * input_mask_expanded, 1) / torch.clamp(input_mask_expanded.sum(1), min=1e-9)
 
 def doc_per_sent_similarity(doc_sent_embeddings, summary_sent_embeddings):
-  doc_sent_similarity = {}
-  sen_id = 0
+    doc_sent_similarity = {}
+    sen_id = 0
 
-  for e1 in doc_sent_embeddings:
-    e2_cos_sum = 0
-    for e2 in summary_sent_embeddings:
-      # Ensure tensors are on CPU before converting to numpy
-      e1_cpu = e1.detach().cpu().numpy().reshape(1, -1)
-      e2_cpu = e2.detach().cpu().numpy().reshape(1, -1)
-      e2_cos_sum += cosine_similarity(e1_cpu, e2_cpu)[0][0]
-    doc_sent_similarity[sen_id] = e2_cos_sum / summary_sent_embeddings.shape[0]
-    sen_id += 1
+    if len(summary_sent_embeddings) == 0:
+        # Avoid division by zero, return zeros for all doc sentences
+        for _ in doc_sent_embeddings:
+            doc_sent_similarity[sen_id] = 0.0
+            sen_id += 1
+        return doc_sent_similarity
 
-  return doc_sent_similarity
+    for e1 in doc_sent_embeddings:
+        e2_cos_sum = 0
+        for e2 in summary_sent_embeddings:
+            # Ensure tensors are on CPU before converting to numpy
+            e1_cpu = e1.detach().cpu().numpy().reshape(1, -1)
+            e2_cpu = e2.detach().cpu().numpy().reshape(1, -1)
+            e2_cos_sum += cosine_similarity(e1_cpu, e2_cpu)[0][0]
+        doc_sent_similarity[sen_id] = e2_cos_sum / len(summary_sent_embeddings)
+        sen_id += 1
+
+    return doc_sent_similarity
 
 
 def compute_similarity(doc_sent, ref_sent, tokenizer, model):
@@ -192,10 +191,13 @@ def compute_similarity(doc_sent, ref_sent, tokenizer, model):
         return compute_rouge_similarity(doc_sent, ref_sent)
 
     elif hasattr(model, 'encode'):
-        doc_embeddings = model.encode(doc_sent, args=tokenizer)
-        ref_embeddings = model.encode(ref_sent, args=tokenizer)
-        doc_embeddings = torch.tensor(doc_embeddings)
-        ref_embeddings = torch.tensor(ref_embeddings)
+        # Bulk/batch embedding for GenEOL and similar models
+        # Combine all sentences from doc and ref, embed in batches
+        all_sents = doc_sent + ref_sent
+        all_embeddings = model.encode(all_sents, args=tokenizer)
+        # Split back to doc and ref
+        doc_embeddings = torch.tensor(all_embeddings[:len(doc_sent)])
+        ref_embeddings = torch.tensor(all_embeddings[len(doc_sent):])
         return doc_per_sent_similarity(doc_embeddings, ref_embeddings)
     
     else:    
@@ -294,11 +296,9 @@ def compute_doc_ref_similarity():
 
     # Set summary_types here:
 
-    # summary_types = ["Abstractive"]
-    # summary_types = ["Abstractive"]
-    # summary_types = ["Abstractive"]
-    summary_types = ["Extractive", "Abstractive"]  #both
-    summary_types = ["Extractive", "Abstractive"]  #both
+    summary_types = ["Abstractive"]
+    # summary_types = ["Extractive"]
+    # summary_types = ["Extractive", "Abstractive"]  #both
 
     for summary_type in summary_types:
         print(f"[INFO] Processing summary_type: {summary_type}")
@@ -366,11 +366,9 @@ def compute_gt():
     """
     dir = "./models/"
     # Set summary_types here:
-    # summary_types = ["Abstractive"]
-    # summary_types = ["Abstractive"]
-    # summary_types = ["Abstractive"]
-    summary_types = ["Abstractive", "Extractive"]  # both
-    summary_types = ["Abstractive", "Extractive"]  # both
+    summary_types = ["Abstractive"]
+    # summary_types = ["Extractive"]
+    # summary_types = ["Abstractive", "Extractive"]  # both
 
     for summary_type in summary_types:
         for _, model_name in SELECTED_MODEL:
@@ -414,21 +412,30 @@ def read_model_file(file="./models/model.json", summary_type=None):
     df = pd.DataFrame.from_dict(data)
     return df["modelSenID"]
 
-def scoreNCG(model_relevance, GT_relevance):
-    cg = sum(model_relevance)
-    icg = sum(GT_relevance)
-    ncg = cg/icg
-    return ncg
+
+# Discounted Cumulative Gain (DCG) and Normalized DCG (nDCG)
+def scoreDCG(relevance):
+    if not relevance:
+        return 0.0
+    dcg = relevance[0]
+    for i in range(1, len(relevance)):
+        dcg += relevance[i] / math.log2(i + 2)  # i+2 because rank starts at 1
+    return dcg
+
+def scoreNDCG(model_relevance, GT_relevance):
+    dcg = scoreDCG(model_relevance)
+    idcg = scoreDCG(GT_relevance)
+    return dcg / idcg if idcg > 0 else 0.0
 
 def computeNCG(gt, model):
     gt_dic = {int(k): v for k, v in dict(gt).items()}
     gt_rel = [v for _, v in gt[:k]]
     model_rel = []
     for j in range(k):
-        model_rel.append(gt_dic[model[j]])
-    return scoreNCG(model_rel, gt_rel)
+        idx = model[j]
+        model_rel.append(gt_dic.get(idx, 0.0))  # Use 0.0 if idx not found
+    return scoreNDCG(model_rel, gt_rel)
 
-# Evaluate for all LLM_MODELS
 
 def eval_ncg(summary_type=None):
     results = {}
@@ -494,12 +501,9 @@ if __name__=="__main__":
 
     compute_doc_ref_similarity()
     compute_gt()
-    # categories = ["Abstractive"]
+    categories = ["Abstractive"]
     # categories = ["Extractive"]
-    categories = ["Abstractive", "Extractive"]
-    # categories = ["Abstractive"]
-    # categories = ["Extractive"]
-    categories = ["Abstractive", "Extractive"]
+    # categories = ["Abstractive", "Extractive"]
     with jsonlines.open("./output/score.jsonl", "a") as writer:
         for cat in categories:
             writer.write(eval_ncg(summary_type=cat))
