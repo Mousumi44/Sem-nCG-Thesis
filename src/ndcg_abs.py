@@ -58,7 +58,7 @@ except LookupError:
     nltk.download('punkt')
 
 # Configuration constants
-LAMBDA_PARAM = 0.5 
+LAMBDA_PARAM = 0.2 
 SUMMARY_TYPE = "Abstractive"  # Fixed to Abstractive summaries only
 
 class NDCGAbsEvaluator:
@@ -181,20 +181,14 @@ class NDCGAbsEvaluator:
         
         GT = {}
         
-        # Steps 5-10: Compute similarity for each document sentence with all reference sentences
-        for i, doc_sent in enumerate(document_sentences):
-            similarities = []
-            
-            # Step 6-8: Compute cosine similarity with each reference sentence
-            for j, ref_sent in enumerate(reference_sentences):
-                sim = cosine_similarity(
-                    doc_embeddings[i].cpu().numpy().reshape(1, -1),
-                    ref_embeddings[j].cpu().numpy().reshape(1, -1)
-                )[0][0]
-                similarities.append(sim)
-            
-            # Step 9: GT[SiD] ← mean(Sim)
-            GT[i] = np.mean(similarities) if similarities else 0.0
+        # Use hybrid similarity (semantic + lexical BM25)
+        similarities = self.compute_hybrid_similarity(
+            doc_embeddings, ref_embeddings, document_sentences, reference_sentences
+        )
+        
+        # Assign similarities to GT dictionary
+        for i, sim in enumerate(similarities):
+            GT[i] = sim
         
         # Step 11: GTsorted ← Sort GT based on mean(Sim)
         GT_sorted = sorted(GT.items(), key=lambda x: x[1], reverse=True)
@@ -252,13 +246,19 @@ class NDCGAbsEvaluator:
             best_doc_idx = 0
             
             for j, doc_sent in enumerate(document_sentences):
-                sim = cosine_similarity(
-                    sum_embeddings[i].cpu().numpy().reshape(1, -1),
-                    doc_embeddings[j].cpu().numpy().reshape(1, -1)
-                )[0][0]
+                # Use enhanced semantic similarity instead of simple cosine
+                semantic_sim = self.compute_semantic_similarity(sum_embeddings[i], doc_embeddings[j])
                 
-                if sim > max_sim:
-                    max_sim = sim
+                # Also compute BM25 similarity
+                bm25_scores = self.compute_bm25_similarity([doc_sent], sum_sent)
+                bm25_sim = bm25_scores[0] if bm25_scores else 0.0
+                bm25_sim_norm = min(bm25_sim / 10.0, 1.0)  # Normalize BM25
+                
+                # Combine semantic and lexical similarities
+                combined_sim = 0.7 * semantic_sim + 0.3 * bm25_sim_norm
+                
+                if combined_sim > max_sim:
+                    max_sim = combined_sim
                     best_doc_idx = j
             
             # Add the gain from the most relevant document sentence
@@ -291,6 +291,138 @@ class NDCGAbsEvaluator:
         
         return idcg_score
     
+    def preprocess_text(self, text):
+        """
+        Clean and preprocess text for better evaluation
+        """
+        import re
+        
+        # Remove extra whitespace
+        text = re.sub(r'\s+', ' ', text.strip())
+        
+        # Remove URLs
+        text = re.sub(r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+', '', text)
+        
+        # Remove email addresses
+        text = re.sub(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b', '', text)
+        
+        # Remove excessive punctuation
+        text = re.sub(r'[.!?]{2,}', '.', text)
+        
+        # Remove very short sentences (less than 10 characters)
+        sentences = text.split('.')
+        sentences = [s.strip() for s in sentences if len(s.strip()) > 10]
+        
+        return '. '.join(sentences) + '.' if sentences else text
+    
+    def filter_sentences(self, sentences):
+        """
+        Filter out low-quality sentences
+        """
+        import re
+        filtered = []
+        for sent in sentences:
+            sent = sent.strip()
+            # Skip very short sentences
+            if len(sent) < 15:
+                continue
+            # Skip sentences with too many special characters
+            if len(re.findall(r'[^a-zA-Z0-9\s]', sent)) > len(sent) * 0.3:
+                continue
+            # Skip sentences that are mostly numbers
+            if len(re.findall(r'\d', sent)) > len(sent) * 0.5:
+                continue
+            filtered.append(sent)
+        return filtered if filtered else sentences  # Return original if all filtered out
+    
+    def compute_semantic_similarity(self, sent1_emb, sent2_emb):
+        """
+        Enhanced semantic similarity beyond simple cosine similarity
+        """
+        # Cosine similarity
+        cos_sim = cosine_similarity(
+            sent1_emb.cpu().numpy().reshape(1, -1),
+            sent2_emb.cpu().numpy().reshape(1, -1)
+        )[0][0]
+        
+        # Euclidean distance (normalized)
+        euclidean_dist = np.linalg.norm(sent1_emb.cpu().numpy() - sent2_emb.cpu().numpy())
+        euclidean_sim = 1 / (1 + euclidean_dist)
+        
+        # Manhattan distance (normalized) 
+        manhattan_dist = np.sum(np.abs(sent1_emb.cpu().numpy() - sent2_emb.cpu().numpy()))
+        manhattan_sim = 1 / (1 + manhattan_dist)
+        
+        # Weighted combination
+        combined_sim = 0.6 * cos_sim + 0.25 * euclidean_sim + 0.15 * manhattan_sim
+        return combined_sim
+    
+    def compute_bm25_similarity(self, doc_sentences, query_sentence, k1=1.5, b=0.75):
+        """
+        Compute BM25 similarity between query sentence and document sentences
+        """
+        # Tokenize all sentences
+        doc_tokens = [sent.lower().split() for sent in doc_sentences]
+        query_tokens = query_sentence.lower().split()
+        
+        # Calculate document frequencies
+        N = len(doc_sentences)
+        df = Counter()
+        for tokens in doc_tokens:
+            df.update(set(tokens))
+        
+        # Calculate average document length
+        avgdl = sum(len(tokens) for tokens in doc_tokens) / N if N > 0 else 1
+        
+        scores = []
+        for doc_idx, doc_token_list in enumerate(doc_tokens):
+            score = 0
+            doc_len = len(doc_token_list)
+            doc_freq = Counter(doc_token_list)
+            
+            for term in query_tokens:
+                if term in doc_freq:
+                    tf = doc_freq[term]
+                    idf = math.log((N - df[term] + 0.5) / (df[term] + 0.5)) if df[term] > 0 else 0
+                    
+                    # BM25 formula
+                    score += idf * (tf * (k1 + 1)) / (tf + k1 * (1 - b + b * (doc_len / avgdl)))
+            
+            scores.append(score)
+        
+        return scores
+    
+    def compute_hybrid_similarity(self, doc_embeddings, ref_embeddings, doc_sentences, ref_sentences):
+        """
+        Combine semantic similarity with BM25 lexical similarity
+        """
+        similarities = []
+        
+        for i, doc_sent in enumerate(doc_sentences):
+            sent_similarities = []
+            
+            for j, ref_sent in enumerate(ref_sentences):
+                # Semantic similarity using enhanced method
+                semantic_sim = self.compute_semantic_similarity(doc_embeddings[i], ref_embeddings[j])
+                
+                # BM25 lexical similarity
+                bm25_scores = self.compute_bm25_similarity([doc_sent], ref_sent)
+                bm25_sim = bm25_scores[0] if bm25_scores else 0.0
+                
+                # Normalize BM25 score (simple min-max normalization)
+                # You might want to adjust this based on your data
+                bm25_sim_norm = min(bm25_sim / 10.0, 1.0)  # Assuming max BM25 score around 10
+                
+                # Combine semantic and lexical similarities
+                # 70% semantic, 30% lexical
+                hybrid_sim = 0.7 * semantic_sim + 0.3 * bm25_sim_norm
+                sent_similarities.append(hybrid_sim)
+            
+            # Use max similarity for better discrimination
+            similarities.append(np.max(sent_similarities) if sent_similarities else 0.0)
+        
+        return similarities
+    
     def compute_cosine_score(self, reference_text, model_text):
         """
         Phase 3: Cosine Similarity Score between reference and model summary
@@ -314,6 +446,7 @@ class NDCGAbsEvaluator:
     
     def compute_ndcg_abs(self, document_text, reference_text, model_text):
         """
+        Complete nDCG-abs computation following Algorithm 1 (with preprocessing)
         
         Args:
             document_text: Original document text
@@ -323,10 +456,25 @@ class NDCGAbsEvaluator:
         Returns:
             nDCG-abs score
         """
-        # Tokenize into sentences
-        doc_sentences = tokenize.sent_tokenize(document_text)
-        ref_sentences = tokenize.sent_tokenize(reference_text)
-        model_sentences = tokenize.sent_tokenize(model_text)
+        # Preprocess texts
+        document_text = self.preprocess_text(document_text)
+        reference_text = self.preprocess_text(reference_text)
+        model_text = self.preprocess_text(model_text)
+        
+        # Tokenize into sentences and filter
+        doc_sentences = self.filter_sentences(tokenize.sent_tokenize(document_text))
+        ref_sentences = self.filter_sentences(tokenize.sent_tokenize(reference_text))
+        model_sentences = self.filter_sentences(tokenize.sent_tokenize(model_text))
+        
+        # Skip very short texts that might cause issues
+        if len(doc_sentences) < 2 or len(ref_sentences) < 1 or len(model_sentences) < 1:
+            return {
+                'ndcg_abs': 0.0,
+                'ndcg': 0.0,
+                'cosine_score': 0.0,
+                'dcg': 0.0,
+                'idcg': 0.0
+            }
         
         # Phase 1: Groundtruth Gain Computation
         gt_gain = self.compute_gain(doc_sentences, ref_sentences)
