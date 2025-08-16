@@ -58,7 +58,7 @@ except LookupError:
     nltk.download('punkt')
 
 # Configuration constants
-LAMBDA_PARAM = 0.2 
+LAMBDA_PARAM = 0.8 
 SUMMARY_TYPE = "Abstractive"  # Fixed to Abstractive summaries only
 
 class NDCGAbsEvaluator:
@@ -181,14 +181,17 @@ class NDCGAbsEvaluator:
         
         GT = {}
         
-        # Use hybrid similarity (semantic + lexical BM25)
-        similarities = self.compute_hybrid_similarity(
-            doc_embeddings, ref_embeddings, document_sentences, reference_sentences
-        )
-        
-        # Assign similarities to GT dictionary
-        for i, sim in enumerate(similarities):
-            GT[i] = sim
+        # Compute simple cosine similarities between document and reference sentences
+        for i, doc_emb in enumerate(doc_embeddings):
+            similarities = []
+            for ref_emb in ref_embeddings:
+                sim = cosine_similarity(
+                    doc_emb.cpu().numpy().reshape(1, -1),
+                    ref_emb.cpu().numpy().reshape(1, -1)
+                )[0][0]
+                similarities.append(sim)
+            # Use max similarity to reference sentences for each document sentence
+            GT[i] = np.max(similarities) if similarities else 0.0
         
         # Step 11: GTsorted ← Sort GT based on mean(Sim)
         GT_sorted = sorted(GT.items(), key=lambda x: x[1], reverse=True)
@@ -246,19 +249,14 @@ class NDCGAbsEvaluator:
             best_doc_idx = 0
             
             for j, doc_sent in enumerate(document_sentences):
-                # Use enhanced semantic similarity instead of simple cosine
-                semantic_sim = self.compute_semantic_similarity(sum_embeddings[i], doc_embeddings[j])
+                # Use simple cosine similarity
+                sim = cosine_similarity(
+                    sum_embeddings[i].cpu().numpy().reshape(1, -1),
+                    doc_embeddings[j].cpu().numpy().reshape(1, -1)
+                )[0][0]
                 
-                # Also compute BM25 similarity
-                bm25_scores = self.compute_bm25_similarity([doc_sent], sum_sent)
-                bm25_sim = bm25_scores[0] if bm25_scores else 0.0
-                bm25_sim_norm = min(bm25_sim / 10.0, 1.0)  # Normalize BM25
-                
-                # Combine semantic and lexical similarities
-                combined_sim = 0.7 * semantic_sim + 0.3 * bm25_sim_norm
-                
-                if combined_sim > max_sim:
-                    max_sim = combined_sim
+                if sim > max_sim:
+                    max_sim = sim
                     best_doc_idx = j
             
             # Add the gain from the most relevant document sentence
@@ -335,94 +333,7 @@ class NDCGAbsEvaluator:
             filtered.append(sent)
         return filtered if filtered else sentences  # Return original if all filtered out
     
-    def compute_semantic_similarity(self, sent1_emb, sent2_emb):
-        """
-        Enhanced semantic similarity beyond simple cosine similarity
-        """
-        # Cosine similarity
-        cos_sim = cosine_similarity(
-            sent1_emb.cpu().numpy().reshape(1, -1),
-            sent2_emb.cpu().numpy().reshape(1, -1)
-        )[0][0]
-        
-        # Euclidean distance (normalized)
-        euclidean_dist = np.linalg.norm(sent1_emb.cpu().numpy() - sent2_emb.cpu().numpy())
-        euclidean_sim = 1 / (1 + euclidean_dist)
-        
-        # Manhattan distance (normalized) 
-        manhattan_dist = np.sum(np.abs(sent1_emb.cpu().numpy() - sent2_emb.cpu().numpy()))
-        manhattan_sim = 1 / (1 + manhattan_dist)
-        
-        # Weighted combination
-        combined_sim = 0.6 * cos_sim + 0.25 * euclidean_sim + 0.15 * manhattan_sim
-        return combined_sim
-    
-    def compute_bm25_similarity(self, doc_sentences, query_sentence, k1=1.5, b=0.75):
-        """
-        Compute BM25 similarity between query sentence and document sentences
-        """
-        # Tokenize all sentences
-        doc_tokens = [sent.lower().split() for sent in doc_sentences]
-        query_tokens = query_sentence.lower().split()
-        
-        # Calculate document frequencies
-        N = len(doc_sentences)
-        df = Counter()
-        for tokens in doc_tokens:
-            df.update(set(tokens))
-        
-        # Calculate average document length
-        avgdl = sum(len(tokens) for tokens in doc_tokens) / N if N > 0 else 1
-        
-        scores = []
-        for doc_idx, doc_token_list in enumerate(doc_tokens):
-            score = 0
-            doc_len = len(doc_token_list)
-            doc_freq = Counter(doc_token_list)
-            
-            for term in query_tokens:
-                if term in doc_freq:
-                    tf = doc_freq[term]
-                    idf = math.log((N - df[term] + 0.5) / (df[term] + 0.5)) if df[term] > 0 else 0
-                    
-                    # BM25 formula
-                    score += idf * (tf * (k1 + 1)) / (tf + k1 * (1 - b + b * (doc_len / avgdl)))
-            
-            scores.append(score)
-        
-        return scores
-    
-    def compute_hybrid_similarity(self, doc_embeddings, ref_embeddings, doc_sentences, ref_sentences):
-        """
-        Combine semantic similarity with BM25 lexical similarity
-        """
-        similarities = []
-        
-        for i, doc_sent in enumerate(doc_sentences):
-            sent_similarities = []
-            
-            for j, ref_sent in enumerate(ref_sentences):
-                # Semantic similarity using enhanced method
-                semantic_sim = self.compute_semantic_similarity(doc_embeddings[i], ref_embeddings[j])
-                
-                # BM25 lexical similarity
-                bm25_scores = self.compute_bm25_similarity([doc_sent], ref_sent)
-                bm25_sim = bm25_scores[0] if bm25_scores else 0.0
-                
-                # Normalize BM25 score (simple min-max normalization)
-                # You might want to adjust this based on your data
-                bm25_sim_norm = min(bm25_sim / 10.0, 1.0)  # Assuming max BM25 score around 10
-                
-                # Combine semantic and lexical similarities
-                # 70% semantic, 30% lexical
-                hybrid_sim = 0.7 * semantic_sim + 0.3 * bm25_sim_norm
-                sent_similarities.append(hybrid_sim)
-            
-            # Use max similarity for better discrimination
-            similarities.append(np.max(sent_similarities) if sent_similarities else 0.0)
-        
-        return similarities
-    
+
     def compute_cosine_score(self, reference_text, model_text):
         """
         Phase 3: Cosine Similarity Score between reference and model summary
