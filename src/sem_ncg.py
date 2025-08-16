@@ -10,12 +10,13 @@ from transformers import AutoTokenizer, AutoModel, AutoModelForCausalLM, LlamaTo
 from sentence_transformers import SentenceTransformer
 # from laser_encoders import LaserEncoderPipeline
 import sys
-import ast
 from copy import deepcopy
 from dotenv import load_dotenv
 import tensorflow_hub as hub
 import tensorflow as tf
 import difflib
+import string
+import math
 
 import jsonlines
 import ast
@@ -49,7 +50,7 @@ LLM_MODELS = [
     ("apple/OpenELM-270M", "openelm"),
     ("allenai/OLMo-2-0425-1B", "olmo"),
     ("Qwen/Qwen3-0.6B", "qwen"),
-    ('AtlaAI/Selene-1-Mini-Llama-3.1-8B', 'selene-llama3.1-8b'),
+    ('AtlaAI/Selene-1-Mini-Llama-3.1-8B', 'selene-llama'),
     ('tiiuae/falcon-7B', 'falcon'),
     # ('microsoft/phi-4', 'phi-4'),
     # ('microsoft/Phi-3-mini-instruct', 'phi-3-mini-instruct'),
@@ -211,15 +212,6 @@ def compute_similarity(doc_sent, ref_sent, tokenizer, model):
         doc_sent_embeddings = mean_pooling(model_doc, encoded_doc['attention_mask'])
         ref_sent_embeddings = mean_pooling(model_ref, encoded_ref['attention_mask'])
         return doc_per_sent_similarity(doc_sent_embeddings, ref_sent_embeddings)
-        device = next(model.parameters()).device
-        encoded_doc = tokenizer(doc_sent, padding=True, truncation=True, max_length=512, return_tensors='pt').to(device)
-        encoded_ref = tokenizer(ref_sent, padding=True, truncation=True, max_length=512, return_tensors='pt').to(device)
-        with torch.no_grad():
-            model_doc = model(**encoded_doc)
-            model_ref = model(**encoded_ref)
-        doc_sent_embeddings = mean_pooling(model_doc, encoded_doc['attention_mask'])
-        ref_sent_embeddings = mean_pooling(model_ref, encoded_ref['attention_mask'])
-        return doc_per_sent_similarity(doc_sent_embeddings, ref_sent_embeddings)
 
 def read_sample_file(file="./data/processed_data.json", summary_type=None):
     """
@@ -314,6 +306,8 @@ def compute_doc_ref_similarity():
                     doc_sent = tokenize.sent_tokenize(doc[i])
                     ref_sent = tokenize.sent_tokenize(ref[i])
                     sim = compute_similarity(doc_sent, ref_sent, tokenizer, model_obj)
+                    # Apply conditional normalization (only if needed)
+                    sim = normalize_similarity_scores(sim)
                     sim = {k: float(v) for k, v in sim.items()}
                     json.dump(sim, fw)
                     fw.write("\n")
@@ -344,18 +338,59 @@ def read_file(model_name, summary_type=None):
         })
     return df
 
+
+def normalize_similarity_scores(similarity_dict):
+  
+    if not similarity_dict:
+        return similarity_dict
+    
+    scores = list(similarity_dict.values())
+    min_score = min(scores)
+    max_score = max(scores)
+    
+    if max_score == min_score:
+        return {k: 1.0 for k in similarity_dict.keys()}
+    
+    normalized = {}
+    for k, v in similarity_dict.items():
+        normalized[k] = (v - min_score) / (max_score - min_score)
+    
+    return normalized
+
+
+# def normalize_similarity_scores(similarity_dict):
+
+#     if not similarity_dict:
+#         return similarity_dict
+    
+#     scores = list(similarity_dict.values())
+#     min_score = min(scores)
+#     max_score = max(scores)
+    
+#     # Standard nDCG approach: clip negative cosine similarities to 0
+#     # This is the most common normalization in semantic similarity papers
+#     if min_score < 0:
+#         normalized = {}
+#         for k, v in similarity_dict.items():
+#             # Clip negative similarities to 0 (standard approach in nDCG)
+#             normalized[k] = max(0.0, v)
+#         return normalized
+    
+#     # If similarities are already non-negative, use them as-is
+#     # This preserves the natural distribution without artificial inflation
+#     return similarity_dict
+    
+#     return normalized
+
 def computeGain(dic_tuple):
     """
     :type dic_tuple: List[tuple] -> already sorted based on score
     :rtype: List[tuple] -> new_dic_tuple -> key:sid, value:gain
     """
-    denom = 1.0*sum([i+1 for i in range(len(dic_tuple))])
-
     new_dic = {}
-    g = len(dic_tuple)
     for sId, score in dic_tuple:
-        new_dic[sId] = (g*1.0)/denom
-        g-=1
+        # Use similarity score directly as gain (as per paper)
+        new_dic[sId] = score
     return sorted(new_dic.items(), key = lambda i : i[1], reverse=True)
 
 
@@ -390,6 +425,7 @@ def compute_gt():
 # computing scores from here
 
 k = 3
+lambda_param = 1.0  # Lambda parameter (1.0 means only semantic, 0.0 means only lexical)
 
 def read_gt_gain(model_name):
     dir = "./models/"
@@ -469,6 +505,7 @@ def eval_ncg(summary_type=None):
         label = f"Sem-nCG@3_{model_name}_{summary_type.lower() if summary_type else 'all'}"
         results[label] = res
     return results
+
 
 if __name__=="__main__":
 

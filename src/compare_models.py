@@ -4,8 +4,8 @@ import seaborn as sns
 from math import pi
 import os
 
-# Load the Sem-nCG scores
-df = pd.read_csv('output/score.csv')
+# Load the nDCG scores
+df = pd.read_csv('output/nDCG_scores.csv')
 
 # Load ROUGE/BERTScore scores if available
 rouge_bert_scores = pd.DataFrame()
@@ -13,7 +13,7 @@ if os.path.exists('output/rouge_bert_scores.csv'):
     rouge_bert_scores = pd.read_csv('output/rouge_bert_scores.csv')
     print(f"Loaded ROUGE/BERTScore scores: {rouge_bert_scores.shape}")
     
-    # Combine with Sem-nCG scores
+    # Combine with nDCG scores
     if not rouge_bert_scores.empty:
         # Ensure same number of rows
         max_rows = max(len(df), len(rouge_bert_scores))
@@ -29,24 +29,32 @@ if os.path.exists('output/rouge_bert_scores.csv'):
         df_combined = df
 else:
     df_combined = df
-    print("ROUGE/BERTScore data not found, using only DCG scores")
+    print("ROUGE/BERTScore data not found, using only nDCG scores")
 
 selected_models = [
-    # 'rougeL_abstractive',
+    
+    #LLMs
+
     # 'olmo_abstractive',
     # 'openelm_abstractive',
     # 'llama3.2_abstractive',
-    # 'gemma_abstractive',
+    'gemma',
     # 'mistral_abstractive',
     # 'qwen_abstractive',
     # 'selene-llama_abstractive',
     # 'yulan-mini_abstractive',
     # 'falcon_abstractive'
 
-     'senticse_abstractive', 'roberta_abstractive', 'sbert-mini_abstractive', 'simcse_abstractive', 'use_abstractive',
+
+    ## classical models
+    'senticse', 
+    'roberta', 
+    'sbert-mini', 
+    'simcse', 
+    'use',
      
-     # Add ROUGE/BERTScore metrics if they exist
-     'rouge1', 'rouge2', 'rougeL', 'rougeLsum', 'bertscore'
+    # ROUGE/BERTScore metrics
+    'rouge1', 'rouge2', 'rougeL', 'bertscore'
 ]
 
 # Filter to models that actually exist in the combined data
@@ -55,33 +63,32 @@ print(f"Available models for visualization: {available_models}")
 
 df_selected = df_combined[available_models]
 
-
+# Create visualizations with combined data
 model_means = df_selected.mean().sort_values(ascending=False)
 plt.figure(figsize=(12, 6))
-ax = sns.barplot(x=model_means.index, y=model_means.values)
+ax = sns.barplot(x=model_means.index, y=model_means.values, palette='viridis')
 
 # Add data labels to each bar
 for container in ax.containers:
     ax.bar_label(container, fmt='%.2f', label_type='edge', fontsize=10)
 
-# plt.xticks(rotation=90)
-plt.title("Average nDCG Score (Selected Models)")
+plt.xticks(rotation=45, ha='right')
+plt.title("Average Scores (nDCG + ROUGE/BERTScore)")
 plt.ylabel("Mean Score")
 plt.tight_layout()
-plt.savefig('output/scores_bar_plot.png')
+plt.savefig('output/scores_bar_plot.png', dpi=300, bbox_inches='tight')
 plt.close()
-
 
 plt.figure(figsize=(14, 6))
 sns.boxplot(data=df_selected)
-# plt.xticks(rotation=90)
-plt.title("Distribution of nDCG Scores per Model")
-plt.savefig('output/scores_box_plot.png')
+plt.xticks(rotation=45, ha='right')
+plt.title("Distribution of Scores per Model (nDCG + ROUGE/BERTScore)")
+plt.tight_layout()
+plt.savefig('output/scores_box_plot.png', dpi=300, bbox_inches='tight')
 plt.close()
 
-
 # Load Kendall's Tau results from both sources
-kendall_df = pd.read_csv('output/kendall_results.csv')
+kendall_df = pd.read_csv('output/kendall_tau_ndcg_results.csv')
 
 # Load ROUGE/BERTScore Kendall results if available
 rouge_bert_kendall = pd.DataFrame()
@@ -97,7 +104,7 @@ if os.path.exists('output/rouge_bert_kendall_results.csv'):
     print(f"Combined Kendall results shape: {kendall_df_combined.shape}")
 else:
     kendall_df_combined = kendall_df
-    print("ROUGE/BERTScore Kendall data not found, using only Sem-nCG Kendall results")
+    print("ROUGE/BERTScore Kendall data not found, using only nDCG Kendall results")
 
 # Filter Kendall results to selected models
 kendall_df_selected = kendall_df_combined[kendall_df_combined['model'].isin(available_models)]
@@ -143,48 +150,65 @@ if not kendall_df_selected.empty:
 
 print("="*80)
 
-heatmap_data = kendall_df_selected.pivot(index="model", columns="annotation", values="tau")
+# Create Kendall visualizations with combined data
+if not kendall_df_selected.empty:
+    heatmap_data = kendall_df_selected.pivot_table(
+        values='tau', index='model', columns='annotation', aggfunc='mean'
+    )
 
-plt.figure(figsize=(12, 8))
-sns.heatmap(heatmap_data, annot=True, cmap="vlag", center=0, fmt=".2f")
-plt.title("Kendall's Tau Correlation: Models vs Annotations")
-plt.tight_layout()
-plt.savefig('output/kendall_heat_map.png')
-plt.close()
+    plt.figure(figsize=(12, 8))
+    mask = heatmap_data.isnull()
+    sns.heatmap(heatmap_data, annot=True, cmap="vlag", center=0, fmt=".2f", 
+               mask=mask, square=True, linewidths=0.5)
+    plt.title("Kendall's Tau Correlation: Models vs Annotations (Combined)")
+    plt.tight_layout()
+    plt.savefig('output/kendall_heat_map.png', dpi=300, bbox_inches='tight')
+    plt.close()
 
+    plt.figure(figsize=(14, 6))
+    ax = sns.barplot(data=kendall_df_selected, x="model", y="tau", hue="annotation", palette='Set2')
+    plt.xticks(rotation=45, ha='right')
+    plt.title("Kendall's Tau by Model and Annotation (Combined)")
+    plt.axhline(0, color='gray', linestyle='--')
+    plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+    plt.tight_layout()
+    plt.savefig('output/kendall_bar_plot.png', dpi=300, bbox_inches='tight')
+    plt.close()
 
-plt.figure(figsize=(14, 6))
-ax = sns.barplot(data=kendall_df_selected, x="model", y="tau", hue="annotation")
-# plt.xticks(rotation=90)
-plt.title("Kendall's Tau by Model and Annotation")
-plt.axhline(0, color='gray', linestyle='--')
-plt.tight_layout()
-plt.savefig('output/kendall_bar_plot.png')
-plt.close()
+    # Add significance if p-values are available
+    if 'p' in kendall_df_selected.columns:
+        kendall_df_selected['significant'] = kendall_df_selected['p'] < 0.05
 
+        plt.figure(figsize=(14, 6))
+        sns.scatterplot(
+            data=kendall_df_selected, x="model", y="tau", hue="annotation",
+            style="significant", s=100, palette="deep"
+        )
+        plt.xticks(rotation=45, ha='right')
+        plt.axhline(0, color='gray', linestyle='--')
+        plt.title("Kendall's Tau with Significance Highlight (Combined)")
+        plt.legend(bbox_to_anchor=(1.05, 1), loc='upper left')
+        plt.tight_layout()
+        plt.savefig('output/kendall_scatter_sig_plot.png', dpi=300, bbox_inches='tight')
+        plt.close()
 
-kendall_df_selected['significant'] = kendall_df_selected['p'] < 0.05
+    # Facet grid
+    if len(kendall_df_selected) > 0:
+        palette_facet = sns.color_palette("Set2", len(kendall_df_selected["model"].unique()))
+        g = sns.FacetGrid(kendall_df_selected, col="annotation", col_wrap=2, height=4, sharey=True)
+        g.map_dataframe(sns.barplot, x="tau", y="model", hue="model", 
+                       order=kendall_df_selected["model"].unique(), palette=palette_facet)
+        g.set_titles("{col_name}")
+        g.fig.subplots_adjust(top=0.9)
+        g.fig.suptitle("Kendall's Tau per Annotation Type (Combined)", fontsize=16)
+        plt.savefig('output/kendall_facet_grid.png', dpi=300, bbox_inches='tight')
+        plt.close()
 
-plt.figure(figsize=(14, 6))
-sns.scatterplot(
-    data=kendall_df_selected, x="model", y="tau", hue="annotation",
-    style="significant", s=100, palette="deep"
-)
-plt.xticks(rotation=90)
-plt.axhline(0, color='gray', linestyle='--')
-plt.title("Kendall's Tau with Significance Highlight")
-plt.tight_layout()
-plt.savefig('output/kendall_scatter_sig_plot.png')
-plt.close()
-
-
-palette = sns.color_palette("Set2", len(kendall_df_selected["model"].unique()))
-g = sns.FacetGrid(kendall_df_selected, col="annotation", col_wrap=2, height=4, sharey=True)
-g.map_dataframe(sns.barplot, x="tau", y="model", hue="model", order=kendall_df_selected["model"].unique(), palette=palette)
-g.set_titles("{col_name}")
-g.fig.subplots_adjust(top=0.9)
-g.fig.suptitle("Kendall’s Tau per Annotation Type", fontsize=16)
-plt.savefig('output/kendall_facet_grid.png')
-plt.close()
-
-print("Plots saved in the output/ directory.")
+print("\nPlots saved in the output/ directory:")
+print("  - scores_bar_plot.png (combined scores)")
+print("  - scores_box_plot.png (score distributions)")
+print("  - kendall_heat_map.png (correlation heatmap)")
+print("  - kendall_bar_plot.png (grouped bar chart)")
+print("  - kendall_scatter_sig_plot.png (scatter with significance)")
+print("  - kendall_facet_grid.png (faceted by annotation)")
+print("  - correlation_table.csv (formatted correlation table)")
