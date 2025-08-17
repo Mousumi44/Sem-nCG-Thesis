@@ -35,13 +35,13 @@ selected_models = [
     
     #LLMs
 
-    # 'olmo_abstractive',
-    # 'openelm_abstractive',
+    'olmo',
+    'openelm',
     # 'llama3.2_abstractive',
     'gemma',
     # 'mistral_abstractive',
     # 'qwen_abstractive',
-    # 'selene-llama_abstractive',
+    'selene-llama',
     # 'yulan-mini_abstractive',
     # 'falcon_abstractive'
 
@@ -122,10 +122,10 @@ if not kendall_df_selected.empty:
         index='model', 
         columns='annotation', 
         aggfunc='mean'
-    ).round(2)
+    ).round(3)
     
     # Add average column
-    correlation_table['Average'] = correlation_table.mean(axis=1).round(2)
+    correlation_table['Average'] = correlation_table.mean(axis=1).round(3)
     correlation_table = correlation_table.sort_values('Average', ascending=False)
     
     # Print formatted table
@@ -141,7 +141,7 @@ if not kendall_df_selected.empty:
             if pd.isna(value):
                 row_str += f"{'N/A':>12}"
             else:
-                row_str += f"{value:>12.2f}"
+                row_str += f"{value:>12.3f}"
         print(row_str)
     
     # Save correlation table
@@ -158,7 +158,7 @@ if not kendall_df_selected.empty:
 
     plt.figure(figsize=(12, 8))
     mask = heatmap_data.isnull()
-    sns.heatmap(heatmap_data, annot=True, cmap="vlag", center=0, fmt=".2f", 
+    sns.heatmap(heatmap_data, annot=True, cmap="vlag", center=0, fmt=".3f", 
                mask=mask, square=True, linewidths=0.5)
     plt.title("Kendall's Tau Correlation: Models vs Annotations (Combined)")
     plt.tight_layout()

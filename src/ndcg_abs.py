@@ -17,6 +17,8 @@ from dotenv import load_dotenv
 from accelerate import Accelerator, InitProcessGroupKwargs
 from argparse import Namespace
 warnings.filterwarnings("ignore")
+import re
+
 
 # Load environment variables
 load_dotenv() 
@@ -26,7 +28,6 @@ from huggingface_hub import login
 if token:
     login(token=token)
 
-# Use the same LLM_MODELS list from main.py
 LLM_MODELS = [
     # LLMs
     ('meta-llama/Llama-3.2-1B', 'llama3.2'),
@@ -58,7 +59,7 @@ except LookupError:
     nltk.download('punkt')
 
 # Configuration constants
-LAMBDA_PARAM = 0.8 
+LAMBDA_PARAM = 0.2
 SUMMARY_TYPE = "Abstractive"  # Fixed to Abstractive summaries only
 
 class NDCGAbsEvaluator:
@@ -149,7 +150,7 @@ class NDCGAbsEvaluator:
             # For sentence transformer models
             return self.model.encode(sentences, convert_to_tensor=True)
         else:
-            # For other transformer models - use mean pooling like in main.py
+            # For other transformer models - use mean pooling
             embeddings = []
             device = next(self.model.parameters()).device
             for sentence in sentences:
@@ -166,22 +167,21 @@ class NDCGAbsEvaluator:
             return torch.stack(embeddings)
     
     def compute_gain(self, document_sentences, reference_sentences):
-        """
-        
+        """        
         Args:
             document_sentences: List of sentences from the document
-            reference_sentences: List of sentences from the reference summary
+            reference_sentences: List of sentences from the reference/model summary
             
         Returns:
-            GTgain: Dictionary mapping sentence indices to normalized gains
+            GTgain: Dictionary mapping document sentence indices to gain values
         """
-        # Step 4: Represent sentences by embedding vectors
+        # Represent sentences by embedding vectors
         doc_embeddings = self._get_embeddings(document_sentences)
         ref_embeddings = self._get_embeddings(reference_sentences)
         
         GT = {}
         
-        # Compute simple cosine similarities between document and reference sentences
+        # For each document sentence, compute similarity with reference sentences
         for i, doc_emb in enumerate(doc_embeddings):
             similarities = []
             for ref_emb in ref_embeddings:
@@ -190,110 +190,30 @@ class NDCGAbsEvaluator:
                     ref_emb.cpu().numpy().reshape(1, -1)
                 )[0][0]
                 similarities.append(sim)
-            # Use max similarity to reference sentences for each document sentence
-            GT[i] = np.max(similarities) if similarities else 0.0
+            # Use mean similarity to reference sentences for each document sentence
+            GT[i] = np.mean(similarities) if similarities else 0.0
         
-        # Step 11: GTsorted ← Sort GT based on mean(Sim)
+        # Sort GT based on mean similarity
         GT_sorted = sorted(GT.items(), key=lambda x: x[1], reverse=True)
         
         # Create rank mapping
         rank_map = {sent_idx: rank + 1 for rank, (sent_idx, _) in enumerate(GT_sorted)}
         
-        # Steps 12-15: Compute GTgain
+        # Compute GTgain
         GTgain = {}
         N = len(document_sentences)
         
         for i, doc_sent in enumerate(document_sentences):
-            # Step 13: SiD(rel) ← N − rank(SiD,GTsorted) + 1
             rel_score = N - rank_map[i] + 1
-            
-            # Step 14: GTgain[SiD] ← SiD(rel) / log2(i+1)
-            # Note: Using position in sorted order for DCG calculation
             position = rank_map[i]
             GTgain[i] = rel_score / np.log2(position + 1)
         
-        # Step 16: Normalize GTgain into a probabilistic gain
-        gain_values = list(GTgain.values())
-        if sum(gain_values) > 0:
-            total_gain = sum(gain_values)
-            GTgain = {k: v / total_gain for k, v in GTgain.items()}
-        
         return GTgain
-    
-    def compute_dcg(self, document_sentences, summary_sentences, gt_gain=None):
-        """
-        Compute DCG score using the groundtruth gain
-        
-        Args:
-            document_sentences: List of document sentences
-            summary_sentences: List of summary sentences  
-            gt_gain: Precomputed groundtruth gain (if None, will compute)
-            
-        Returns:
-            DCG score
-        """
-        if gt_gain is None:
-            # If no precomputed gain, compute it (this shouldn't happen in normal flow)
-            gt_gain = self.compute_gain(document_sentences, summary_sentences)
-        
-        # Get embeddings
-        doc_embeddings = self._get_embeddings(document_sentences)
-        sum_embeddings = self._get_embeddings(summary_sentences)
-        
-        # Find most relevant document sentences for each summary sentence
-        dcg_score = 0.0
-        
-        for i, sum_sent in enumerate(summary_sentences):
-            # Find the document sentence most similar to this summary sentence
-            max_sim = -1
-            best_doc_idx = 0
-            
-            for j, doc_sent in enumerate(document_sentences):
-                # Use simple cosine similarity
-                sim = cosine_similarity(
-                    sum_embeddings[i].cpu().numpy().reshape(1, -1),
-                    doc_embeddings[j].cpu().numpy().reshape(1, -1)
-                )[0][0]
-                
-                if sim > max_sim:
-                    max_sim = sim
-                    best_doc_idx = j
-            
-            # Add the gain from the most relevant document sentence
-            # Discounted by position in summary
-            gain = gt_gain.get(best_doc_idx, 0.0)
-            dcg_score += gain / np.log2(i + 2)  # i+2 because DCG starts from position 1
-        
-        return dcg_score
-    
-    def compute_idcg(self, gt_gain, k=None):
-        """
-        Compute Ideal DCG using the groundtruth gain
-        
-        Args:
-            gt_gain: Groundtruth gain dictionary
-            k: Number of top positions to consider (if None, use all)
-            
-        Returns:
-            IDCG score
-        """
-        # Sort gains in descending order
-        sorted_gains = sorted(gt_gain.values(), reverse=True)
-        
-        if k is not None:
-            sorted_gains = sorted_gains[:k]
-        
-        idcg_score = 0.0
-        for i, gain in enumerate(sorted_gains):
-            idcg_score += gain / np.log2(i + 2)  # i+2 because DCG starts from position 1
-        
-        return idcg_score
     
     def preprocess_text(self, text):
         """
         Clean and preprocess text for better evaluation
         """
-        import re
         
         # Remove extra whitespace
         text = re.sub(r'\s+', ' ', text.strip())
@@ -336,7 +256,7 @@ class NDCGAbsEvaluator:
 
     def compute_cosine_score(self, reference_text, model_text):
         """
-        Phase 3: Cosine Similarity Score between reference and model summary
+        Cosine Similarity Score between reference and model summary
         
         Args:
             reference_text: Reference summary text
@@ -357,7 +277,7 @@ class NDCGAbsEvaluator:
     
     def compute_ndcg_abs(self, document_text, reference_text, model_text):
         """
-        Complete nDCG-abs computation following Algorithm 1 (with preprocessing)
+        Complete nDCG-abs computation
         
         Args:
             document_text: Original document text
@@ -387,23 +307,47 @@ class NDCGAbsEvaluator:
                 'idcg': 0.0
             }
         
-        # Phase 1: Groundtruth Gain Computation
-        gt_gain = self.compute_gain(doc_sentences, ref_sentences)
+        # Groundtruth Gain Computation  
+        gt_gain_reference = self.compute_gain(doc_sentences, ref_sentences)
         
-        # Phase 2: nDCG Computation
-        # Step 1: IDCG ← Compute the IDCG score using COMPUTEGAIN(D,R)
-        idcg = self.compute_idcg(gt_gain)
+        # nDCG Computation
+        # IDCG computation
+        gt_gain_reference = self.compute_gain(doc_sentences, ref_sentences)
+        sorted_gains_ref = sorted(gt_gain_reference.values(), reverse=True)
+        idcg = sum(gain / np.log2(i + 2) for i, gain in enumerate(sorted_gains_ref))
         
-        # Step 2: DCG ← Compute the DCG score using COMPUTEGAIN(D,M)
-        dcg = self.compute_dcg(doc_sentences, model_sentences, gt_gain)
+        # DCG computation
+        gt_gain_model = self.compute_gain(doc_sentences, model_sentences)
         
-        # Step 3: nDCG ← DCG/IDCG
+        # Map model sentences to document sentences and use gains in model order
+        doc_embeddings = self._get_embeddings(doc_sentences)
+        model_embeddings = self._get_embeddings(model_sentences)
+        
+        dcg = 0.0
+        for i, model_emb in enumerate(model_sentences):
+            # Find best matching document sentence for this model sentence
+            max_sim = -1
+            best_doc_idx = 0
+            for j, doc_emb in enumerate(doc_embeddings):
+                sim = cosine_similarity(
+                    model_embeddings[i].cpu().numpy().reshape(1, -1),
+                    doc_emb.cpu().numpy().reshape(1, -1)
+                )[0][0]
+                if sim > max_sim:
+                    max_sim = sim
+                    best_doc_idx = j
+            
+            # Use gain from COMPUTEGAIN(D,M) for the best matching document sentence
+            gain = gt_gain_model.get(best_doc_idx, 0.0)
+            dcg += gain / np.log2(i + 2)
+        
+        # nDCG calculation
         ndcg = dcg / idcg if idcg > 0 else 0.0
         
-        # Phase 3: Cosine Similarity Score
+        # Cosine Similarity Score
         cosine_score = self.compute_cosine_score(reference_text, model_text)
         
-        # Phase 4: Final Score
+        # Final Score
         # nDCG-abs Score = λ · nDCG + (1 − λ) · Cosine Score
         ndcg_abs_score = self.lambda_param * ndcg + (1 - self.lambda_param) * cosine_score
         
@@ -488,10 +432,10 @@ def evaluate_dataset(data_file="./data/processed_data.json", model_name="sbert-m
                 'idcg': 0.0
             })
     
-    # Save results in the same format as rouge_bert_scores.csv
+    # Save results
     os.makedirs(output_dir, exist_ok=True)
     
-    # Use a single shared file for all models (like rouge_bert_scores.csv)
+    # Use a single shared file for all models
     scores_csv_file = f"{output_dir}/nDCG_scores.csv"
     
     # Create DataFrame with just the scores (no headers, no metadata)

@@ -62,7 +62,7 @@ def compute_kendall_tau_correlations():
                             
                         h_vals, s_vals = zip(*valid)
                         tau, p = kendalltau(h_vals, s_vals)
-                        print(f"  {model_col} vs {annotation_type}: tau={tau:.3f}, p={p:.3g} ({len(valid)} pairs)")
+                        # print(f"  {model_col} vs {annotation_type}: tau={tau:.3f}, p={p:.3g} ({len(valid)} pairs)")
                         results.append({
                             "score_type": score_type,
                             "model": model_col, 
@@ -84,13 +84,13 @@ def compute_kendall_tau_correlations():
             print(f"\nKendall's tau results saved to ./output/kendall_tau_ndcg_results.csv")
             
             # Print summary
-            print("\nSummary of correlations:")
-            for score_type in df_kendall['score_type'].unique():
-                subset = df_kendall[df_kendall['score_type'] == score_type]
-                avg_tau = subset['tau'].mean()
-                print(f"  {score_type}: Average tau = {avg_tau:.3f}")
-        else:
-            print("No results to save.")
+        #     print("\nSummary of correlations:")
+        #     for score_type in df_kendall['score_type'].unique():
+        #         subset = df_kendall[df_kendall['score_type'] == score_type]
+        #         avg_tau = subset['tau'].mean()
+        #         print(f"  {score_type}: Average tau = {avg_tau:.3f}")
+        # else:
+        #     print("No results to save.")
         
     except FileNotFoundError:
         print("Error: ./data/processed_data.json not found. Cannot compute Kendall's tau.")
