@@ -1,190 +1,203 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
-from math import pi
+import numpy as np
 import os
 
-# Load the Sem-nCG scores
-df = pd.read_csv('output/score.csv')
-
-# Load ROUGE/BERTScore scores if available
-rouge_bert_scores = pd.DataFrame()
-if os.path.exists('output/rouge_bert_scores.csv'):
-    rouge_bert_scores = pd.read_csv('output/rouge_bert_scores.csv')
-    print(f"Loaded ROUGE/BERTScore scores: {rouge_bert_scores.shape}")
+def load_and_combine_correlation_data():
+    """Load and combine nDCG and baseline correlation data"""
     
-    # Combine with Sem-nCG scores
-    if not rouge_bert_scores.empty:
-        # Ensure same number of rows
-        max_rows = max(len(df), len(rouge_bert_scores))
-        if len(df) < max_rows:
-            df = df.reindex(range(max_rows))
-        if len(rouge_bert_scores) < max_rows:
-            rouge_bert_scores = rouge_bert_scores.reindex(range(max_rows))
+    # Load nDCG correlations
+    ndcg_df = pd.read_csv('output/model_level_correlation_table.csv')
+    print(f"Loaded nDCG correlations: {ndcg_df.shape}")
+    
+    # Load baseline correlations
+    baseline_df = pd.read_csv('output/baseline_correlation.csv')
+    print(f"Loaded baseline correlations: {baseline_df.shape}")
+    
+    # Combine both dataframes
+    combined_df = pd.concat([ndcg_df, baseline_df], ignore_index=True)
+    print(f"Combined correlations shape: {combined_df.shape}")
+    
+    return combined_df
+
+def load_score_data():
+    """Load nDCG and baseline score data for distribution analysis"""
+    
+    # Load nDCG scores
+    try:
+        ndcg_scores = pd.read_csv('output/nDCG_scores.csv')
+        print(f"Loaded nDCG scores: {ndcg_scores.shape}")
+    except FileNotFoundError:
+        print("nDCG scores file not found, will skip nDCG distribution plots")
+        ndcg_scores = None
+    
+    # Load baseline scores
+    try:
+        baseline_scores = pd.read_csv('output/baseline_models_scores.csv')
+        print(f"Loaded baseline scores: {baseline_scores.shape}")
+    except FileNotFoundError:
+        print("Baseline scores file not found, will skip baseline distribution plots")
+        baseline_scores = None
+    
+    return ndcg_scores, baseline_scores
+
+def create_correlation_visualizations():
+    """Create visualizations from combined correlation data"""
+    
+    # Load combined data
+    correlation_df = load_and_combine_correlation_data()
+    
+    # Selected models for visualization
+    selected_models = [
+        # LLMs
+        # 'ndcg_falcon',
+        # 'ndcg_llama3.2', 
+        # 'ndcg_olmo',
+        # 'ndcg_openelm',
+        # 'ndcg_gemma',
+        # 'ndcg_mistral',
+        # 'ndcg_qwen',
+        # 'ndcg_selene-llama',
+        # 'ndcg_yulan-mini',
         
-        # Combine datasets
-        df_combined = pd.concat([df, rouge_bert_scores], axis=1)
-        print(f"Combined scores shape: {df_combined.shape}")
-    else:
-        df_combined = df
-else:
-    df_combined = df
-    print("ROUGE/BERTScore data not found, using only DCG scores")
-
-selected_models = [
-    # 'rougeL_abstractive',
-    # 'olmo_abstractive',
-    # 'openelm_abstractive',
-    # 'llama3.2_abstractive',
-    # 'gemma_abstractive',
-    # 'mistral_abstractive',
-    # 'qwen_abstractive',
-    # 'selene-llama_abstractive',
-    # 'yulan-mini_abstractive',
-    # 'falcon_abstractive'
-
-     'senticse_abstractive', 'roberta_abstractive', 'sbert-mini_abstractive', 'simcse_abstractive', 'use_abstractive',
-     
-     # Add ROUGE/BERTScore metrics if they exist
-     'rouge1', 'rouge2', 'rougeL', 'rougeLsum', 'bertscore'
-]
-
-# Filter to models that actually exist in the combined data
-available_models = [model for model in selected_models if model in df_combined.columns]
-print(f"Available models for visualization: {available_models}")
-
-df_selected = df_combined[available_models]
-
-
-model_means = df_selected.mean().sort_values(ascending=False)
-plt.figure(figsize=(12, 6))
-ax = sns.barplot(x=model_means.index, y=model_means.values)
-
-# Add data labels to each bar
-for container in ax.containers:
-    ax.bar_label(container, fmt='%.2f', label_type='edge', fontsize=10)
-
-# plt.xticks(rotation=90)
-plt.title("Average nDCG Score (Selected Models)")
-plt.ylabel("Mean Score")
-plt.tight_layout()
-plt.savefig('output/scores_bar_plot.png')
-plt.close()
-
-
-plt.figure(figsize=(14, 6))
-sns.boxplot(data=df_selected)
-# plt.xticks(rotation=90)
-plt.title("Distribution of nDCG Scores per Model")
-plt.savefig('output/scores_box_plot.png')
-plt.close()
-
-
-# Load Kendall's Tau results from both sources
-kendall_df = pd.read_csv('output/kendall_results.csv')
-
-# Load ROUGE/BERTScore Kendall results if available
-rouge_bert_kendall = pd.DataFrame()
-if os.path.exists('output/rouge_bert_kendall_results.csv'):
-    rouge_bert_kendall = pd.read_csv('output/rouge_bert_kendall_results.csv')
-    # Rename 'metric' to 'model' for consistency if needed
-    if 'metric' in rouge_bert_kendall.columns:
-        rouge_bert_kendall = rouge_bert_kendall.rename(columns={'metric': 'model'})
-    print(f"Loaded ROUGE/BERTScore Kendall results: {rouge_bert_kendall.shape}")
+        # Classical embedding models
+        'ndcg_senticse', 
+        'ndcg_roberta', 
+        'ndcg_sbert-mini', 
+        'ndcg_simcse', 
+        'ndcg_use',
+        'ndcg_sbert-l',
+        
+        # Baseline metrics
+        'rouge1', 
+        'rouge2', 
+        'rougeL', 
+        'bertscore',
+        'bartscore'
+    ]
     
-    # Combine Kendall results
-    kendall_df_combined = pd.concat([kendall_df, rouge_bert_kendall], ignore_index=True)
-    print(f"Combined Kendall results shape: {kendall_df_combined.shape}")
-else:
-    kendall_df_combined = kendall_df
-    print("ROUGE/BERTScore Kendall data not found, using only Sem-nCG Kendall results")
-
-# Filter Kendall results to selected models
-kendall_df_selected = kendall_df_combined[kendall_df_combined['model'].isin(available_models)]
-
-print(f"Kendall data for selected models: {len(kendall_df_selected)} rows")
-
-# Create correlation table like the research paper format
-print("\n" + "="*80)
-print("HUMAN EVALUATION CORRELATION TABLE (Kendall's Tau)")
-print("="*80)
-
-if not kendall_df_selected.empty:
-    correlation_table = kendall_df_selected.pivot_table(
-        values='tau', 
-        index='model', 
-        columns='annotation', 
-        aggfunc='mean'
-    ).round(2)
+    # Filter to available models
+    available_models = [model for model in selected_models if model in correlation_df['metric'].values]
+    correlation_df_filtered = correlation_df[correlation_df['metric'].isin(available_models)]
     
-    # Add average column
-    correlation_table['Average'] = correlation_table.mean(axis=1).round(2)
-    correlation_table = correlation_table.sort_values('Average', ascending=False)
+    print(f"Available models for visualization: {len(available_models)}")
+    print(f"Models: {available_models}")
+    
+    # Set up the data for plotting
+    correlation_df_filtered = correlation_df_filtered.set_index('metric')
+    
+    # Sort by average correlation (descending)
+    correlation_df_filtered = correlation_df_filtered.sort_values('Average', ascending=False)
+    
+    # Create bar plot of average correlations
+    plt.figure(figsize=(14, 8))
+    colors = ['red' if 'ndcg_falcon' in idx else 'skyblue' if 'ndcg_' in idx else 'lightcoral' for idx in correlation_df_filtered.index]
+    
+    bars = plt.bar(range(len(correlation_df_filtered)), correlation_df_filtered['Average'], color=colors)
+    
+    # Add value labels on bars
+    for i, (idx, row) in enumerate(correlation_df_filtered.iterrows()):
+        plt.text(i, row['Average'] + 0.01, f'{row["Average"]:.3f}', 
+                ha='center', va='bottom', fontsize=9, rotation=0)
+    
+    plt.xticks(range(len(correlation_df_filtered)), correlation_df_filtered.index, rotation=45, ha='right')
+    plt.ylabel('Average Kendall\'s Tau')
+    plt.title('Model Performance: Average Correlation with Human Judgments')
+    plt.axhline(y=0, color='gray', linestyle='--', alpha=0.7)
+    plt.grid(axis='y', alpha=0.3)
+    
+    # Add legend
+    from matplotlib.patches import Patch
+    # legend_elements = [
+    #     Patch(facecolor='red', label='Falcon (Best nDCG)'),
+    #     Patch(facecolor='skyblue', label='Other nDCG Models'),
+    #     Patch(facecolor='lightcoral', label='Baseline Models')
+    # ]
+    # plt.legend(handles=legend_elements, loc='upper right')
+    
+    plt.tight_layout()
+    plt.savefig('output/combined_correlation_bar_plot.png', dpi=300, bbox_inches='tight')
+    plt.close()
+    
+    # Create heatmap
+    plt.figure(figsize=(10, 12))
+    
+    # Prepare data for heatmap (exclude Average column)
+    heatmap_data = correlation_df_filtered[['coherence', 'consistency', 'fluency', 'relevance']]
+    
+    # Create heatmap
+    sns.heatmap(heatmap_data, annot=True, cmap='RdYlBu_r', center=0, fmt='.3f',
+                square=False, linewidths=0.5, cbar_kws={"shrink": .8})
+    
+    plt.title('Correlation Heatmap: Models vs Human Judgment Aspects')
+    plt.ylabel('Models')
+    plt.xlabel('Human Judgment Aspects')
+    plt.tight_layout()
+    plt.savefig('output/combined_correlation_heatmap.png', dpi=300, bbox_inches='tight')
+    plt.close()
+    
+    # Create grouped bar chart by aspect
+    fig, axes = plt.subplots(2, 2, figsize=(16, 12))
+    aspects = ['coherence', 'consistency', 'fluency', 'relevance']
+    
+    for i, aspect in enumerate(aspects):
+        ax = axes[i//2, i%2]
+        
+        # Sort by this aspect
+        aspect_sorted = correlation_df_filtered.sort_values(aspect, ascending=False)
+        colors = ['red' if 'ndcg_falcon' in idx else 'skyblue' if 'ndcg_' in idx else 'lightcoral' for idx in aspect_sorted.index]
+        
+        bars = ax.bar(range(len(aspect_sorted)), aspect_sorted[aspect], color=colors)
+        
+        # Add value labels
+        for j, (idx, val) in enumerate(zip(aspect_sorted.index, aspect_sorted[aspect])):
+            ax.text(j, val + 0.01 if val >= 0 else val - 0.03, f'{val:.2f}', 
+                   ha='center', va='bottom' if val >= 0 else 'top', fontsize=8)
+        
+        ax.set_xticks(range(len(aspect_sorted)))
+        ax.set_xticklabels(aspect_sorted.index, rotation=45, ha='right')
+        ax.set_title(f'{aspect.capitalize()} Correlation')
+        ax.set_ylabel('Kendall\'s Tau')
+        ax.axhline(y=0, color='gray', linestyle='--', alpha=0.7)
+        ax.grid(axis='y', alpha=0.3)
+    
+    plt.suptitle('Model Performance by Human Judgment Aspect', fontsize=16)
+    plt.tight_layout()
+    plt.savefig('output/combined_correlation_by_aspect.png', dpi=300, bbox_inches='tight')
+    plt.close()
+    
+    # Create comparison table in terminal
+    print("\n" + "="*100)
+    print("COMBINED HUMAN EVALUATION CORRELATION TABLE (Kendall's Tau)")
+    print("="*100)
     
     # Print formatted table
-    header = f"{'Metric':<25}"
-    for col in correlation_table.columns:
-        header += f"{col:>12}"
+    header = f"{'Metric':<20} {'Coherence':>12} {'Consistency':>12} {'Fluency':>12} {'Relevance':>12} {'Average':>12}"
     print(header)
     print("-" * len(header))
     
-    for metric, row in correlation_table.iterrows():
-        row_str = f"{metric:<25}"
-        for value in row:
-            if pd.isna(value):
+    for metric, row in correlation_df_filtered.iterrows():
+        row_str = f"{metric:<20}"
+        for col in ['coherence', 'consistency', 'fluency', 'relevance', 'Average']:
+            if pd.isna(row[col]):
                 row_str += f"{'N/A':>12}"
             else:
-                row_str += f"{value:>12.2f}"
+                row_str += f"{row[col]:>12.3f}"
         print(row_str)
     
-    # Save correlation table
-    correlation_table.to_csv('output/correlation_table.csv')
-    print(f"\nCorrelation table saved to output/correlation_table.csv")
+    print("="*100)
+    
+    # Top performers analysis
+    print("\n🏆 TOP PERFORMERS:")
+    print(f"Overall Best: {correlation_df_filtered.index[0]} (τ = {correlation_df_filtered.iloc[0]['Average']:.3f})")
+    print(f"Best Baseline: {correlation_df_filtered[~correlation_df_filtered.index.str.contains('ndcg_')].index[0]}")
+    print(f"Best nDCG: {correlation_df_filtered[correlation_df_filtered.index.str.contains('ndcg_')].index[0]}")
+    
+    print("\n📊 VISUALIZATIONS SAVED:")
+    print("  - combined_correlation_bar_plot.png (overall performance)")
+    print("  - combined_correlation_heatmap.png (aspect comparison)")
+    print("  - combined_correlation_by_aspect.png (detailed by aspect)")
 
-print("="*80)
-
-heatmap_data = kendall_df_selected.pivot(index="model", columns="annotation", values="tau")
-
-plt.figure(figsize=(12, 8))
-sns.heatmap(heatmap_data, annot=True, cmap="vlag", center=0, fmt=".2f")
-plt.title("Kendall's Tau Correlation: Models vs Annotations")
-plt.tight_layout()
-plt.savefig('output/kendall_heat_map.png')
-plt.close()
-
-
-plt.figure(figsize=(14, 6))
-ax = sns.barplot(data=kendall_df_selected, x="model", y="tau", hue="annotation")
-# plt.xticks(rotation=90)
-plt.title("Kendall's Tau by Model and Annotation")
-plt.axhline(0, color='gray', linestyle='--')
-plt.tight_layout()
-plt.savefig('output/kendall_bar_plot.png')
-plt.close()
-
-
-kendall_df_selected['significant'] = kendall_df_selected['p'] < 0.05
-
-plt.figure(figsize=(14, 6))
-sns.scatterplot(
-    data=kendall_df_selected, x="model", y="tau", hue="annotation",
-    style="significant", s=100, palette="deep"
-)
-plt.xticks(rotation=90)
-plt.axhline(0, color='gray', linestyle='--')
-plt.title("Kendall's Tau with Significance Highlight")
-plt.tight_layout()
-plt.savefig('output/kendall_scatter_sig_plot.png')
-plt.close()
-
-
-palette = sns.color_palette("Set2", len(kendall_df_selected["model"].unique()))
-g = sns.FacetGrid(kendall_df_selected, col="annotation", col_wrap=2, height=4, sharey=True)
-g.map_dataframe(sns.barplot, x="tau", y="model", hue="model", order=kendall_df_selected["model"].unique(), palette=palette)
-g.set_titles("{col_name}")
-g.fig.subplots_adjust(top=0.9)
-g.fig.suptitle("Kendall’s Tau per Annotation Type", fontsize=16)
-plt.savefig('output/kendall_facet_grid.png')
-plt.close()
-
-print("Plots saved in the output/ directory.")
+if __name__ == "__main__":
+    create_correlation_visualizations()

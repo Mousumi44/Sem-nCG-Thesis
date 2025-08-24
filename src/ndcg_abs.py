@@ -17,8 +17,6 @@ from dotenv import load_dotenv
 from accelerate import Accelerator, InitProcessGroupKwargs
 from argparse import Namespace
 warnings.filterwarnings("ignore")
-import re
-
 
 # Load environment variables
 load_dotenv() 
@@ -38,6 +36,7 @@ LLM_MODELS = [
     ("Qwen/Qwen3-0.6B", "qwen"),
     ('AtlaAI/Selene-1-Mini-Llama-3.1-8B', 'selene-llama'),
     ('tiiuae/falcon-7B', 'falcon'),
+    ('tiiuae/Falcon3-7B-Base', 'falcon3'),
     ('yulan-team/YuLan-Mini', 'yulan-mini'),
 
     # Classical models
@@ -59,17 +58,11 @@ except LookupError:
     nltk.download('punkt')
 
 # Configuration constants
-LAMBDA_PARAM = 0.2
+LAMBDA_PARAM = 0.3 # optimal
 SUMMARY_TYPE = "Abstractive"  # Fixed to Abstractive summaries only
 
 class NDCGAbsEvaluator:
     def __init__(self, model_name="sentence-transformers/all-MiniLM-L6-v2"):
-        """
-        Initialize the nDCG-abs evaluator
-        
-        Args:
-            model_name: Model to use for sentence embeddings
-        """
         self.lambda_param = LAMBDA_PARAM
         self.model_name = model_name
         self.model = None
@@ -77,16 +70,13 @@ class NDCGAbsEvaluator:
         self._load_model()
     
     def _load_model(self):
-        """Load the embedding model using the same logic as main.py"""
         print(f"Loading model: {self.model_name}")
         
         if self.model_name == "universal-sentence-encoder":
-            # For Universal Sentence Encoder, load from TF Hub
             module_url = "https://tfhub.dev/google/universal-sentence-encoder/4"
             self.model = hub.load(module_url)
             return
         elif "openelm" in self.model_name.lower():
-            # Use LlamaTokenizer as a compatible tokenizer for OpenELM
             device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
             self.model = AutoModelForCausalLM.from_pretrained(self.model_name, trust_remote_code=True).to(device)
             self.tokenizer = LlamaTokenizer.from_pretrained("hf-internal-testing/llama-tokenizer")
@@ -96,7 +86,6 @@ class NDCGAbsEvaluator:
                 else:
                     self.tokenizer.add_special_tokens({'pad_token': '[PAD]'})
         elif self.model_name == "geneol":
-            # For GenEOL model
             from geneol.geneol_embeddings import get_geneol_embeddings
             from geneol import GenEOL
             args = Namespace(
@@ -124,10 +113,8 @@ class NDCGAbsEvaluator:
             self.model = GenEOL(accelerator=accelerator, args=args)
             self.tokenizer = args
         elif "sentence-transformers" in self.model_name:
-            # For sentence transformer models
             self.model = SentenceTransformer(self.model_name)
         else:
-            # For other transformer models
             self.tokenizer = AutoTokenizer.from_pretrained(self.model_name, trust_remote_code=True)
             if self.tokenizer.pad_token is None:
                 if self.tokenizer.eos_token is not None:
@@ -137,246 +124,133 @@ class NDCGAbsEvaluator:
             self.model = AutoModel.from_pretrained(self.model_name, trust_remote_code=True, device_map="auto")
     
     def _get_embeddings(self, sentences):
-        """Get embeddings for a list of sentences using the same logic as main.py"""
         if hasattr(self.model, '_is_hub_module_v1'):
-            # For Universal Sentence Encoder
             embeddings = self.model(tf.constant(sentences))
             return torch.from_numpy(embeddings.numpy())
         elif hasattr(self.model, 'encode'):
-            # For GenEOL and similar models with encode method
             all_embeddings = self.model.encode(sentences, args=self.tokenizer)
             return torch.tensor(all_embeddings)
         elif isinstance(self.model, SentenceTransformer):
-            # For sentence transformer models
             return self.model.encode(sentences, convert_to_tensor=True)
         else:
-            # For other transformer models - use mean pooling
             embeddings = []
             device = next(self.model.parameters()).device
             for sentence in sentences:
-                encoded = self.tokenizer(sentence, padding=True, truncation=True, 
-                                       max_length=512, return_tensors='pt').to(device)
-                with torch.no_grad():
-                    outputs = self.model(**encoded)
-                    # Mean pooling
-                    attention_mask = encoded['attention_mask']
-                    token_embeddings = outputs.last_hidden_state
-                    input_mask_expanded = attention_mask.unsqueeze(-1).expand(token_embeddings.size()).float()
-                    embedding = torch.sum(token_embeddings * input_mask_expanded, 1) / torch.clamp(input_mask_expanded.sum(1), min=1e-9)
-                    embeddings.append(embedding.squeeze())
-            return torch.stack(embeddings)
+                try:
+                    encoded = self.tokenizer(sentence, padding=True, truncation=True, 
+                                        max_length=512, return_tensors='pt').to(device)
+                    with torch.no_grad():
+                        # For causal models (like OpenELM), need to enable hidden states output
+                        outputs = self.model(**encoded, output_hidden_states=True)
+                        
+                        # Handle different output types
+                        if hasattr(outputs, 'last_hidden_state'):
+                            # Standard models (BERT, RoBERTa, etc.)
+                            token_embeddings = outputs.last_hidden_state
+                        elif hasattr(outputs, 'hidden_states'):
+                            # Causal models (GPT, LLaMA, OpenELM, etc.)
+                            token_embeddings = outputs.hidden_states[-1]  # Last layer
+                        else:
+                            print(f"Warning: Unsupported model output type for sentence: {sentence[:50]}...")
+                            continue
+                        
+                        attention_mask = encoded['attention_mask']
+                        input_mask_expanded = attention_mask.unsqueeze(-1).expand(token_embeddings.size()).float()
+                        embedding = torch.sum(token_embeddings * input_mask_expanded, 1) / torch.clamp(input_mask_expanded.sum(1), min=1e-9)
+                        embeddings.append(embedding.squeeze())
+                except Exception as e:
+                    print(f"Error processing sentence: {e}")
+                    # Add a zero embedding as fallback
+                    if embeddings:
+                        embeddings.append(torch.zeros_like(embeddings[0]))
+                    else:
+                        embeddings.append(torch.zeros(768))  # Default embedding size
+                
+        return torch.stack(embeddings) if embeddings else torch.zeros((len(sentences), 768))
     
-    def compute_gain(self, document_sentences, reference_sentences):
-        """        
-        Args:
-            document_sentences: List of sentences from the document
-            reference_sentences: List of sentences from the reference/model summary
-            
-        Returns:
-            GTgain: Dictionary mapping document sentence indices to gain values
+    def compute_gain(self, document_sentences, summary_sentences):
         """
-        # Represent sentences by embedding vectors
+        Compute ground truth or model ranking gains
+        Returns normalized gains and ranking order.
+        """
         doc_embeddings = self._get_embeddings(document_sentences)
-        ref_embeddings = self._get_embeddings(reference_sentences)
+        sum_embeddings = self._get_embeddings(summary_sentences)
         
-        GT = {}
-        
-        # For each document sentence, compute similarity with reference sentences
+        sims = {}
         for i, doc_emb in enumerate(doc_embeddings):
             similarities = []
-            for ref_emb in ref_embeddings:
+            for sum_emb in sum_embeddings:
                 sim = cosine_similarity(
                     doc_emb.cpu().numpy().reshape(1, -1),
-                    ref_emb.cpu().numpy().reshape(1, -1)
+                    sum_emb.cpu().numpy().reshape(1, -1)
                 )[0][0]
                 similarities.append(sim)
-            # Use mean similarity to reference sentences for each document sentence
-            GT[i] = np.mean(similarities) if similarities else 0.0
-        
-        # Sort GT based on mean similarity
-        GT_sorted = sorted(GT.items(), key=lambda x: x[1], reverse=True)
-        
-        # Create rank mapping
-        rank_map = {sent_idx: rank + 1 for rank, (sent_idx, _) in enumerate(GT_sorted)}
-        
-        # Compute GTgain
-        GTgain = {}
-        N = len(document_sentences)
-        
-        for i, doc_sent in enumerate(document_sentences):
-            rel_score = N - rank_map[i] + 1
-            position = rank_map[i]
-            GTgain[i] = rel_score / np.log2(position + 1)
-        
-        return GTgain
-    
-    def preprocess_text(self, text):
-        """
-        Clean and preprocess text for better evaluation
-        """
-        
-        # Remove extra whitespace
-        text = re.sub(r'\s+', ' ', text.strip())
-        
-        # Remove URLs
-        text = re.sub(r'http[s]?://(?:[a-zA-Z]|[0-9]|[$-_@.&+]|[!*\\(\\),]|(?:%[0-9a-fA-F][0-9a-fA-F]))+', '', text)
-        
-        # Remove email addresses
-        text = re.sub(r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b', '', text)
-        
-        # Remove excessive punctuation
-        text = re.sub(r'[.!?]{2,}', '.', text)
-        
-        # Remove very short sentences (less than 10 characters)
-        sentences = text.split('.')
-        sentences = [s.strip() for s in sentences if len(s.strip()) > 10]
-        
-        return '. '.join(sentences) + '.' if sentences else text
-    
-    def filter_sentences(self, sentences):
-        """
-        Filter out low-quality sentences
-        """
-        import re
-        filtered = []
-        for sent in sentences:
-            sent = sent.strip()
-            # Skip very short sentences
-            if len(sent) < 15:
-                continue
-            # Skip sentences with too many special characters
-            if len(re.findall(r'[^a-zA-Z0-9\s]', sent)) > len(sent) * 0.3:
-                continue
-            # Skip sentences that are mostly numbers
-            if len(re.findall(r'\d', sent)) > len(sent) * 0.5:
-                continue
-            filtered.append(sent)
-        return filtered if filtered else sentences  # Return original if all filtered out
-    
+            sims[i] = np.mean(similarities) if similarities else 0.0
 
-    def compute_cosine_score(self, reference_text, model_text):
-        """
-        Cosine Similarity Score between reference and model summary
+        # Sort by similarity
+        sorted_items = sorted(sims.items(), key=lambda x: x[1], reverse=True)
         
-        Args:
-            reference_text: Reference summary text
-            model_text: Model-generated summary text
-            
-        Returns:
-            Cosine similarity score
-        """
+        # Assign relevance N..1 
+        N = len(document_sentences)
+        gains = {}
+        for rank, (idx, _) in enumerate(sorted_items):
+            rel = N - rank
+            gains[idx] = rel
+
+        # Normalize gains (probabilities)
+        norm_factor = sum(gains.values()) if sum(gains.values()) > 0 else 1.0
+        for k in gains:
+            gains[k] /= norm_factor
+        
+        ranking = [idx for idx, _ in sorted_items]
+        return gains, ranking
+    
+    def compute_cosine_score(self, reference_text, model_text):
         ref_embedding = self._get_embeddings([reference_text])
         model_embedding = self._get_embeddings([model_text])
-        
         cosine_sim = cosine_similarity(
             ref_embedding.cpu().numpy(),
             model_embedding.cpu().numpy()
         )[0][0]
-        
         return cosine_sim
     
     def compute_ndcg_abs(self, document_text, reference_text, model_text):
         """
-        Complete nDCG-abs computation
-        
-        Args:
-            document_text: Original document text
-            reference_text: Reference summary text
-            model_text: Model-generated summary text
-            
-        Returns:
-            nDCG-abs score
+        Full nDCG-abs computation
         """
-        # Preprocess texts
-        document_text = self.preprocess_text(document_text)
-        reference_text = self.preprocess_text(reference_text)
-        model_text = self.preprocess_text(model_text)
+        doc_sentences = tokenize.sent_tokenize(document_text)
+        ref_sentences = tokenize.sent_tokenize(reference_text)
+        model_sentences = tokenize.sent_tokenize(model_text)
         
-        # Tokenize into sentences and filter
-        doc_sentences = self.filter_sentences(tokenize.sent_tokenize(document_text))
-        ref_sentences = self.filter_sentences(tokenize.sent_tokenize(reference_text))
-        model_sentences = self.filter_sentences(tokenize.sent_tokenize(model_text))
-        
-        # Skip very short texts that might cause issues
         if len(doc_sentences) < 2 or len(ref_sentences) < 1 or len(model_sentences) < 1:
-            return {
-                'ndcg_abs': 0.0,
-                'ndcg': 0.0,
-                'cosine_score': 0.0,
-                'dcg': 0.0,
-                'idcg': 0.0
-            }
+            return {'ndcg_abs': 0.0, 'ndcg': 0.0, 'cosine_score': 0.0, 'dcg': 0.0, 'idcg': 0.0}
         
-        # Groundtruth Gain Computation  
-        gt_gain_reference = self.compute_gain(doc_sentences, ref_sentences)
+        # ---- Phase 1: GT gains from reference ----
+        gt_gains, gt_ranking = self.compute_gain(doc_sentences, ref_sentences)
+        idcg = sum(gt_gains[idx] / np.log2(rank + 2) for rank, idx in enumerate(gt_ranking))
         
-        # nDCG Computation
-        # IDCG computation
-        gt_gain_reference = self.compute_gain(doc_sentences, ref_sentences)
-        sorted_gains_ref = sorted(gt_gain_reference.values(), reverse=True)
-        idcg = sum(gain / np.log2(i + 2) for i, gain in enumerate(sorted_gains_ref))
+        # ---- Phase 2: Model ranking (reuse GT gains) ----
+        _, model_ranking = self.compute_gain(doc_sentences, model_sentences)
+        dcg = sum(gt_gains.get(idx, 0.0) / np.log2(rank + 2) for rank, idx in enumerate(model_ranking))
         
-        # DCG computation
-        gt_gain_model = self.compute_gain(doc_sentences, model_sentences)
-        
-        # Map model sentences to document sentences and use gains in model order
-        doc_embeddings = self._get_embeddings(doc_sentences)
-        model_embeddings = self._get_embeddings(model_sentences)
-        
-        dcg = 0.0
-        for i, model_emb in enumerate(model_sentences):
-            # Find best matching document sentence for this model sentence
-            max_sim = -1
-            best_doc_idx = 0
-            for j, doc_emb in enumerate(doc_embeddings):
-                sim = cosine_similarity(
-                    model_embeddings[i].cpu().numpy().reshape(1, -1),
-                    doc_emb.cpu().numpy().reshape(1, -1)
-                )[0][0]
-                if sim > max_sim:
-                    max_sim = sim
-                    best_doc_idx = j
-            
-            # Use gain from COMPUTEGAIN(D,M) for the best matching document sentence
-            gain = gt_gain_model.get(best_doc_idx, 0.0)
-            dcg += gain / np.log2(i + 2)
-        
-        # nDCG calculation
         ndcg = dcg / idcg if idcg > 0 else 0.0
         
-        # Cosine Similarity Score
+        # ---- Phase 3: Cosine similarity ----
         cosine_score = self.compute_cosine_score(reference_text, model_text)
         
-        # Final Score
-        # nDCG-abs Score = λ · nDCG + (1 − λ) · Cosine Score
+        # ---- Phase 4: Final score ----
         ndcg_abs_score = self.lambda_param * ndcg + (1 - self.lambda_param) * cosine_score
         
-        return {
-            'ndcg_abs': ndcg_abs_score,
-            'ndcg': ndcg,
-            'cosine_score': cosine_score,
-            'dcg': dcg,
-            'idcg': idcg
-        }
+        return {'ndcg_abs': ndcg_abs_score, 'ndcg': ndcg, 'cosine_score': cosine_score, 'dcg': dcg, 'idcg': idcg}
 
 def get_model_path_from_name(model_name):
-    """Get the model path from the model name using LLM_MODELS list"""
     for model_path, name in LLM_MODELS:
         if name == model_name:
             return model_path
-    return model_name  # If not found, assume it's already a path
+    return model_name
 
 def evaluate_dataset(data_file="./data/processed_data.json", model_name="sbert-mini", 
                     output_dir="./output"):
-    """
-    Evaluate entire dataset using nDCG-abs
-    
-    Args:
-        data_file: Path to the dataset file
-        model_name: Model name from LLM_MODELS list or direct model path
-        output_dir: Output directory for results
-    """
-    # Convert model name to model path if needed
     model_path = get_model_path_from_name(model_name)
     
     print(f"nDCG-abs Evaluation")
@@ -386,16 +260,12 @@ def evaluate_dataset(data_file="./data/processed_data.json", model_name="sbert-m
     print(f"Summary Type: {SUMMARY_TYPE}")
     print("=" * 50)
     
-    # Load data
     with open(data_file, 'r') as f:
         data = json.load(f)
     
-    # Filter by summary type (always Abstractive)
     data = [item for item in data if item.get("summary_type") == SUMMARY_TYPE]
-    
     print(f"Evaluating {len(data)} samples...")
     
-    # Initialize evaluator with the model path
     evaluator = NDCGAbsEvaluator(model_name=model_path)
     
     results = []
@@ -407,7 +277,6 @@ def evaluate_dataset(data_file="./data/processed_data.json", model_name="sbert-m
             reference = item["Reference"]
             model_summary = item["model"]
             
-            # Compute nDCG-abs
             result = evaluator.compute_ndcg_abs(document, reference, model_summary)
             
             results.append(result['ndcg_abs'])
@@ -432,61 +301,92 @@ def evaluate_dataset(data_file="./data/processed_data.json", model_name="sbert-m
                 'idcg': 0.0
             })
     
-    # Save results
     os.makedirs(output_dir, exist_ok=True)
-    
-    # Use a single shared file for all models
     scores_csv_file = f"{output_dir}/nDCG_scores.csv"
     
-    # Create DataFrame with just the scores (no headers, no metadata)
-    new_scores_df = pd.DataFrame({model_name: results})
-    
-    # Check if file exists and append as new column, otherwise create new file
     if os.path.exists(scores_csv_file):
-        # Read existing data
         existing_df = pd.read_csv(scores_csv_file)
-        # Check if this model column already exists
         if model_name in existing_df.columns:
             print(f"Warning: Column '{model_name}' already exists. Overwriting...")
-            existing_df = existing_df.drop(columns=[model_name])
-        # Add new column
-        combined_df = pd.concat([existing_df, new_scores_df], axis=1)
+            existing_df[model_name] = results
+        else:
+            existing_df[model_name] = results
+        combined_df = existing_df
     else:
-        # Create new file
-        combined_df = new_scores_df
+        combined_df = pd.DataFrame({model_name: results})
     
-    # Save updated CSV
     combined_df.to_csv(scores_csv_file, index=False)
     
     print(f"\nResults saved:")
     print(f"  Scores CSV: {scores_csv_file}")
     
-    # Print statistics
     print(f"\nStatistics:")
-    print(f"  Mean nDCG-abs: {np.mean(results):.4f}")
-    print(f"  Std nDCG-abs:  {np.std(results):.4f}")
-    print(f"  Min nDCG-abs:  {np.min(results):.4f}")
-    print(f"  Max nDCG-abs:  {np.max(results):.4f}")
+    ndcg_scores = results
+    print(f"  Mean nDCG-abs: {np.mean(ndcg_scores):.4f}")
+    print(f"  Std nDCG-abs:  {np.std(ndcg_scores):.4f}")
+    print(f"  Min nDCG-abs:  {np.min(ndcg_scores):.4f}")
+    print(f"  Max nDCG-abs:  {np.max(ndcg_scores):.4f}")
     
     return results, detailed_results
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: python ndcg_abs.py <model_name>")
+        print("Usage: python ndcg_abs.py <model_name> [model_name2] [model_name3] ...")
         print("Available models:")
         for model_path, model_name in LLM_MODELS:
             print(f"  {model_name} ({model_path})")
         print(f"\nUsing fixed parameters: lambda={LAMBDA_PARAM}, summary_type={SUMMARY_TYPE}")
-        print("Example: python ndcg_abs.py sbert-mini")
+        print("Examples:")
+        print("  python ndcg_abs.py sbert-mini")
+        print("  python ndcg_abs.py sbert-mini roberta simcse")
+        print("  python ndcg_abs.py all  # Run all available models")
         sys.exit(1)
     
-    model_name = sys.argv[1]
+    model_names = sys.argv[1:]
     
-    # Validate model name
+    if len(model_names) == 1 and model_names[0].lower() == "all":
+        model_names = [name for _, name in LLM_MODELS]
+        print(f"Running all {len(model_names)} models: {', '.join(model_names)}")
+    
     valid_models = [name for _, name in LLM_MODELS]
-    if model_name not in valid_models:
-        print(f"Error: Model '{model_name}' not found in LLM_MODELS.")
+    invalid_models = [name for name in model_names if name not in valid_models]
+    
+    if invalid_models:
+        print(f"Error: Invalid model(s): {', '.join(invalid_models)}")
         print("Available models:", ', '.join(valid_models))
         sys.exit(1)
     
-    evaluate_dataset(model_name=model_name)
+    print(f"Starting nDCG-abs evaluation for {len(model_names)} model(s)")
+    print("=" * 60)
+    
+    all_results = {}
+    for i, model_name in enumerate(model_names):
+        print(f"\n[{i+1}/{len(model_names)}] Processing model: {model_name}")
+        print("-" * 50)
+        
+        try:
+            results, detailed_results = evaluate_dataset(model_name=model_name)
+            all_results[model_name] = {
+                'results': results,
+                'detailed_results': detailed_results
+            }
+            print(f"✓ Completed {model_name}")
+        except Exception as e:
+            print(f"✗ Error processing {model_name}: {e}")
+            continue
+    
+    print(f"\n" + "=" * 60)
+    print(f"EVALUATION COMPLETE")
+    print(f"Successfully processed: {len(all_results)}/{len(model_names)} models")
+    
+    if all_results:
+        print(f"\nModel Performance Summary:")
+        print("-" * 40)
+        for model_name, data in all_results.items():
+            scores = data['results']
+            print(f"{model_name:<15}: μ={np.mean(scores):.4f}, σ={np.std(scores):.4f}")
+        
+        print(f"\nResults saved to: ./output/nDCG_scores.csv")
+        print(f"Lambda parameter: {LAMBDA_PARAM}")
+    else:
+        print("No models were successfully processed.")

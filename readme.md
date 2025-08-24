@@ -41,13 +41,13 @@ HF_TOKEN=your_huggingface_token_here
 ### Using python
 
 ```bash
-python src/ndcg_abs.py <MODEL_NAME>
+python src/ndcg_abs.py <MODEL_NAMES LIST>
 ```
 
 ### Using shell script
 
 ```bash
-./run_pipeline.sh <MODEL_NAME>
+./run_pipeline.sh <MODEL_NAMES LIST>
 ```
 
 Note: conda has to be activated in both cases
@@ -59,7 +59,7 @@ Available models: llama3.2, gemma-3-1b-it, mistral, openelm, olmo-2-1b, qwen3-0.
 To compute correlations and save results in a csv file, run:
 
 ```bash
-python src/kendall_tau_evaluation.py
+python src/model_level_correlation.py
 ```
 
 
@@ -68,7 +68,7 @@ python src/kendall_tau_evaluation.py
 After running the main pipeline, generate tables and plots from the output data:
 
 ```bash
-python src/compare_models.py
+python src/create_visualizations.py
 ```
 
 
@@ -86,7 +86,7 @@ Results and plots will be saved in the `output/` and `models/` directories.
 
 ## Evaluation Metric
 
-- **Sem-nCG@k** = Normalized Cumulative Gain for top-k model sentences
+- **nDCG** = Normalized Cumulative Discounted Gain
 
 
 
